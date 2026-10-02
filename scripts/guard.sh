@@ -15,6 +15,12 @@
 # 2 usage or scanner error.
 set -euo pipefail
 
+# Agent sandboxes can't reach the fsmonitor daemon, and a one-shot scan gains
+# nothing from it, so the guard's git calls skip it rather than print errors.
+# (Environment config, git >= 2.31, appended to any the caller set; argv unchanged.)
+n=${GIT_CONFIG_COUNT:-0}
+export "GIT_CONFIG_KEY_$n=core.fsmonitor" "GIT_CONFIG_VALUE_$n=false" GIT_CONFIG_COUNT=$((n + 1))
+
 cached=""
 column=w
 scope="working-tree"
@@ -28,7 +34,11 @@ top=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "guard: not inside a 
 cd "$top"
 
 scanner_error() { echo "guard: scanner error: $*" >&2; exit 2; }
-work=$(mktemp -d) || scanner_error "cannot create a temporary directory"
+# Temp space: $TMPDIR named explicitly (macOS `mktemp -d` ignores it, and agent
+# sandboxes often allow only $TMPDIR), else the git dir, which is writable
+# whenever a commit is possible.
+work=$(mktemp -d "${TMPDIR:-/tmp}/guard.XXXXXX" 2>/dev/null || mktemp -d "$(git rev-parse --git-dir)/guard.XXXXXX") \
+  || scanner_error "cannot create a temporary directory"
 trap 'rm -rf "$work"' EXIT
 findings=0
 finding() { printf '  %s  [%s]\n' "$1" "$2"; findings=$((findings + 1)); }

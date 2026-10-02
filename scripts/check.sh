@@ -16,7 +16,10 @@ step "content guard"
 scripts/guard.sh
 
 step "guard self-test"
-scratch=$(mktemp -d)
+make_scratch() { # same temp-space rule as the guard: $TMPDIR named explicitly, else the git dir
+  mktemp -d "${TMPDIR:-/tmp}/check.XXXXXX" 2>/dev/null || mktemp -d "$(git rev-parse --git-dir)/check.XXXXXX"
+}
+scratch=$(make_scratch) || fail "cannot create a temporary directory"
 trap 'rm -rf "$scratch"' EXIT
 cases=0
 
@@ -126,6 +129,42 @@ text_case worktree-text sample.txt "plain"
 printf 'id %s 1\n' "$mrn" > "$scratch/worktree-text/sample.txt"
 expect worktree-text worktree 1 record-number-marker
 expect worktree-text staged 0
+
+text_case tmp-fallback notes.txt "hello world"    # an unusable $TMPDIR falls back to the git dir
+if ! (cd "$scratch/tmp-fallback" && TMPDIR=/nonexistent-guard-tmp bash scripts/guard.sh --staged < /dev/null) > "$scratch/tmp-fallback.out" 2>&1; then
+  sed 's/^/    /' "$scratch/tmp-fallback.out" >&2
+  fail "self-test tmp-fallback: guard failed when \$TMPDIR is unusable"
+fi
+if ls -d "$scratch"/tmp-fallback/.git/guard.* > /dev/null 2>&1; then
+  fail "self-test tmp-fallback: guard left its temp dir in the git dir"
+fi
+cases=$((cases + 1))
+
+# This script's own allocation takes the same fallback.
+fallback=$(TMPDIR=/nonexistent-check-tmp make_scratch) || fail "self-test check-tmp-fallback: no temp dir when \$TMPDIR is unusable"
+gitdir=$(cd "$(git rev-parse --git-dir)" && pwd -P)
+case "$(cd "$fallback" && pwd -P)" in
+  "$gitdir"/check.*) rm -rf "$fallback" ;;
+  *) rm -rf "$fallback"; fail "self-test check-tmp-fallback: temp dir outside the git dir" ;;
+esac
+cases=$((cases + 1))
+
+# The guard must not consult a configured fsmonitor (sandboxes can't reach its daemon).
+hook="$scratch/fsmonitor-hook"; hook_log="$scratch/fsmonitor.log"
+printf '#!/bin/sh\necho called >> "%s"\nexit 1\n' "$hook_log" > "$hook"
+chmod +x "$hook"
+text_case fsmonitor notes.txt "hello world"
+with_hook() { (cd "$scratch/fsmonitor" && GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0="$hook" "$@") > /dev/null 2>&1 < /dev/null; }
+with_hook git ls-files    # control: plain git does consult the hook
+if [ -s "$hook_log" ]; then
+  : > "$hook_log"
+  with_hook bash scripts/guard.sh --staged || fail "self-test fsmonitor: guard failed with a configured fsmonitor"
+  with_hook bash scripts/guard.sh || fail "self-test fsmonitor: guard failed with a configured fsmonitor (working tree)"
+  [ ! -s "$hook_log" ] || fail "self-test fsmonitor: the guard consulted core.fsmonitor"
+  cases=$((cases + 1))
+else
+  echo "  fsmonitor case skipped: this git doesn't consult the hook for ls-files"
+fi
 
 echo "guard self-test: $cases cases passed"
 
