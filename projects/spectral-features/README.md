@@ -1,6 +1,6 @@
 # Spectral features
 
-Small standalone JavaScript functions for converting decibel spectra to linear magnitude and computing spectral centroid, spread, and rolloff. The functions and 20 synthetic checks preserve the existing audio-math implementation.
+Small standalone JavaScript functions for converting decibel spectra to linear magnitude and computing spectral centroid, spread, and rolloff. The functions and 20 synthetic checks preserve the existing audio-math implementation; `tools/test-contract.mjs` adds checks for the input contract documented below.
 
 Run with Node.js and npm; no dependency installation is needed:
 

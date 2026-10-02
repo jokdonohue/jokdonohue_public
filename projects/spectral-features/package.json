@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tools/test-features.mjs"
+    "test": "node tools/test-features.mjs && node tools/test-contract.mjs"
   }
 }
