@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Runs the content guard on the staged snapshot before every commit.
+# Enable once per clone: git config core.hooksPath .githooks
+exec "$(git rev-parse --show-toplevel)/scripts/guard.sh" --staged
