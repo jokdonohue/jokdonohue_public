@@ -1,0 +1,41 @@
+name: Agent task
+description: A scoped task for a coding agent (Copilot, Codex, Claude) or a person.
+title: "[task] "
+body:
+  - type: markdown
+    attributes:
+      value: Keep the task small enough to review in one sitting. Issues are stored on GitHub, so never paste patient or clinical information, credentials or private correspondence here.
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What should be true when this is done?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: In scope
+      description: Files or directories the agent may change; everything else is out of scope.
+    validations:
+      required: true
+  - type: input
+    id: acceptance
+    attributes:
+      label: Acceptance check
+      description: The command that must pass.
+      value: scripts/check.sh
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Behaviour to keep, dependencies not to add, anything off limits.
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Data boundary
+      options:
+        - label: This issue contains no patient or clinical information, credentials or personal identifiers.
+          required: true

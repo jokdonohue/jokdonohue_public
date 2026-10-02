@@ -1,0 +1,24 @@
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Secrets and local environment (scripts/guard.sh also blocks these)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+__pycache__/
+*.py[cod]
+.venv/
+
+# Agent-local state
+.claude/settings.local.json
+.claude/.cc-writes/
