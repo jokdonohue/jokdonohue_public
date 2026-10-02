@@ -16,7 +16,9 @@ step "content guard"
 scripts/guard.sh
 
 step "guard self-test"
-scratch=$(mktemp -d)
+# Same temp-space rule as the guard: $TMPDIR named explicitly, else the git dir.
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/check.XXXXXX" 2>/dev/null || mktemp -d "$(git rev-parse --git-dir)/check.XXXXXX") \
+  || fail "cannot create a temporary directory"
 trap 'rm -rf "$scratch"' EXIT
 cases=0
 
@@ -126,6 +128,16 @@ text_case worktree-text sample.txt "plain"
 printf 'id %s 1\n' "$mrn" > "$scratch/worktree-text/sample.txt"
 expect worktree-text worktree 1 record-number-marker
 expect worktree-text staged 0
+
+text_case tmp-fallback notes.txt "hello world"    # an unusable $TMPDIR falls back to the git dir
+if ! (cd "$scratch/tmp-fallback" && TMPDIR=/nonexistent-guard-tmp bash scripts/guard.sh --staged < /dev/null) > "$scratch/tmp-fallback.out" 2>&1; then
+  sed 's/^/    /' "$scratch/tmp-fallback.out" >&2
+  fail "self-test tmp-fallback: guard failed when \$TMPDIR is unusable"
+fi
+if ls -d "$scratch"/tmp-fallback/.git/guard.* > /dev/null 2>&1; then
+  fail "self-test tmp-fallback: guard left its temp dir in the git dir"
+fi
+cases=$((cases + 1))
 
 echo "guard self-test: $cases cases passed"
 
