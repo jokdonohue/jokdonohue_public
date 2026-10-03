@@ -21,6 +21,7 @@ make_scratch() { # same temp-space rule as the guard: $TMPDIR named explicitly, 
 }
 scratch=$(make_scratch) || fail "cannot create a temporary directory"
 trap 'rm -rf "$scratch"' EXIT
+scratch=$(cd "$scratch" && pwd -P)    # absolute, so hook paths resolve inside nested fixture repos
 cases=0
 
 # Synthetic values are assembled at runtime from split fragments, so this
