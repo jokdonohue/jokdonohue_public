@@ -1,0 +1,14 @@
+{
+  "source": "reviews/claude/data/technical_endgames.json (project deliverable; see technical_endgames_README.md beside it)",
+  "source_sha256": "95c8bb706b045d7c8da35d2eded89de2a9cd2dc2c9b384b83d651bc4b96a56e7",
+  "readme_sha256": "683958b30af341101507d38427cdff032e59c2da87901c4f49fa85d0490a8d81",
+  "author": "Claude Opus subagent for Fable (curation, wording and line choices); copied unchanged into the app on 2026-11-09",
+  "license": "Original project content. Positions are standard textbook ideas re-set by the curator; no book text or diagram was copied.",
+  "verified": "2026-11-08",
+  "verification": "Every position has 7 or fewer pieces. Root result, every solver move and every opponent reply were checked against the Lichess Syzygy tablebase; each line was replayed with chess.js 1.4.0; a shadow check mirrored the app's puzzle schema.",
+  "count": 26,
+  "split": { "win": 13, "hold": 13 },
+  "ratings": "Difficulty values (700-1500) are the curator's estimates on the app's 600-1800 scale, not measured from solve data.",
+  "grading": "Exact match with the stored line, except that any mating final move is accepted. The README lists the plies where other moves also keep the result; the app's feedback says 'not the move this drill is practising' rather than calling them mistakes.",
+  "opponent": "Opponent replies are scripted, tablebase-justified moves. There is no resisting engine ('engine defends' mode is an open owner decision, default off)."
+}

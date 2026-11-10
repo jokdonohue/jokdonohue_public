@@ -1,0 +1,6 @@
+# Exact repo-relative paths of binary or data files committed on purpose (AGENTS.md "Data boundary").
+# Next Move: the unmodified Stockfish 19.0.1 WebAssembly engine, its NNUE network and the exact
+# corresponding source archive, kept together as GPL-3.0 requires (see projects/next-move/README.md).
+projects/next-move/app/public/engine/stockfish-19-lite-single.wasm
+projects/next-move/app/public/engine/nn-61e7af4bb97d.nnue
+projects/next-move/app/public/engine/stockfish-source-19.0.1.tar.gz

@@ -1,0 +1,51 @@
+<title>Next Move</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Shell: a single centred column; the app stylesheet below takes over once the trainer mounts. */
+:root {
+  --shell-bg: #f6f7f4;
+  --shell-fg: #1d2421;
+  --shell-muted: #5d6a63;
+  --shell-line: #d9ded8;
+  --shell-light-square: #e9edd9;
+  --shell-dark-square: #7c9a6e;
+  --shell-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --shell-bg: #141816; --shell-fg: #e7ece8; --shell-muted: #9aa8a0; --shell-line: #2c3430;
+    --shell-light-square: #4a5a45; --shell-dark-square: #2f3d2c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --shell-bg: #141816; --shell-fg: #e7ece8; --shell-muted: #9aa8a0; --shell-line: #2c3430;
+  --shell-light-square: #4a5a45; --shell-dark-square: #2f3d2c; color-scheme: dark;
+}
+body { background: var(--shell-bg); color: var(--shell-fg); font-family: var(--shell-font); }
+#root { min-height: 100%; }
+.boot-message {
+  max-width: 34rem; margin: 0 auto; padding-block: 3rem;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 0.75rem; line-height: 1.5;
+}
+.boot-message h1 { font-size: 1.375rem; margin: 0; text-wrap: balance; }
+.boot-message p { margin: 0; color: var(--shell-muted); }
+.boot-board {
+  width: 4.5rem; aspect-ratio: 1; max-width: 100%; border: 1px solid var(--shell-line);
+  background: conic-gradient(var(--shell-light-square) 25%, var(--shell-dark-square) 0 50%, var(--shell-light-square) 0 75%, var(--shell-dark-square) 0) 0 0 / 50% 50%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .boot-board { animation: boot-pulse 1.4s ease-in-out infinite alternate; }
+  @keyframes boot-pulse { from { opacity: 0.55; } to { opacity: 1; } }
+}
+/*__APP_CSS__*/
+</style>
+<div id="root">
+  <div class="boot-message" aria-live="polite">
+    <div class="boot-board" aria-hidden="true"></div>
+    <h1>Next Move</h1>
+    <p>Loading your positions and history. Today's first position opens here in a moment.</p>
+    <noscript><p>Next Move needs JavaScript to run.</p></noscript>
+  </div>
+</div>
+<!--__APP_SCRIPT__-->

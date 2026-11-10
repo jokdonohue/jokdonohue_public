@@ -1,0 +1,6 @@
+# Local only: build output, the dependency link, and data built from a player's own games.
+/node_modules
+/dist/
+/.build/
+/seed/
+/seed_m2/

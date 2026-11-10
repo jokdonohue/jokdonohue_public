@@ -1,0 +1,498 @@
+[
+  {
+    "id": "tech-krk-mate-in-two-king-step",
+    "fen": "7k/R7/5K2/8/8/8/8/8 w - - 0 1",
+    "moves": [
+      "f6g6",
+      "h8g8",
+      "a7a8"
+    ],
+    "rating": 700,
+    "themes": [
+      "endgame-tech",
+      "rookEndgame",
+      "endgame",
+      "mate",
+      "mateIn2"
+    ],
+    "gameUrl": "",
+    "title": "Rook mate: bring the king up",
+    "explanation": "The rook already holds the seventh rank. Kg6 takes away h7 and g7, so Black's only move is Kg8, and Ra8 is mate along the back rank. A rook move first would either stalemate Black or let the king out."
+  },
+  {
+    "id": "tech-krk-mate-in-two-rook-cut",
+    "fen": "6k1/8/7K/8/8/8/8/R7 w - - 0 1",
+    "moves": [
+      "a1f1",
+      "g8h8",
+      "f1f8"
+    ],
+    "rating": 700,
+    "themes": [
+      "endgame-tech",
+      "rookEndgame",
+      "endgame",
+      "mate",
+      "mateIn2"
+    ],
+    "gameUrl": "",
+    "title": "Rook mate: cut the king off",
+    "explanation": "Rf1 takes away the f-file, and your king already covers g7 and h7. Black is forced into the corner with Kh8, and Rf8 is mate. Checking first with Rg1+ lets the king slip out towards f7 and the mate takes longer."
+  },
+  {
+    "id": "tech-krk-mate-in-three",
+    "fen": "6k1/1R6/4K3/8/8/8/8/8 w - - 0 1",
+    "moves": [
+      "e6f6",
+      "g8h8",
+      "f6g6",
+      "h8g8",
+      "b7b8"
+    ],
+    "rating": 800,
+    "themes": [
+      "endgame-tech",
+      "rookEndgame",
+      "endgame",
+      "mate",
+      "mateIn3"
+    ],
+    "gameUrl": "",
+    "title": "Rook mate in three: walk the king in",
+    "explanation": "The rook already holds the seventh rank, so let the king do the work. Kf6 and Kg6 take away g7 and h7 one step at a time, without giving stalemate. When Black's king is pinned to the back rank, the rook mates along it."
+  },
+  {
+    "id": "tech-kqk-mate-in-two-king-step",
+    "fen": "7k/4Q3/8/4K3/8/8/8/8 w - - 0 1",
+    "moves": [
+      "e5f6",
+      "h8g8",
+      "e7g7"
+    ],
+    "rating": 700,
+    "themes": [
+      "endgame-tech",
+      "queenEndgame",
+      "endgame",
+      "mate",
+      "mateIn2"
+    ],
+    "gameUrl": "",
+    "title": "Queen mate: king first, no stalemate",
+    "explanation": "The queen cannot mate alone, so bring the king to f6 where it supports g7. Black's only move is Kg8, and Qg7 is mate. Be careful with the queen here: Qf7 at once would leave Black no legal move without being in check, which is stalemate."
+  },
+  {
+    "id": "tech-rule-of-the-square",
+    "fen": "8/8/8/8/7P/2k5/8/K7 b - - 0 1",
+    "moves": [
+      "c3d4",
+      "h4h5",
+      "d4e5",
+      "h5h6",
+      "e5f6",
+      "h6h7",
+      "f6g7"
+    ],
+    "rating": 700,
+    "themes": [
+      "endgame-tech",
+      "pawnEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Step into the square",
+    "explanation": "Draw a square from the pawn to its promotion rank, here d4 to h8. If your king can step inside it, you catch the pawn. Kd4 is the only move that enters the square. Then keep walking diagonally towards h8, staying inside the shrinking square every move."
+  },
+  {
+    "id": "tech-pawn-race-promote-with-check",
+    "fen": "7k/8/8/7p/P7/8/8/K7 w - - 0 1",
+    "moves": [
+      "a4a5"
+    ],
+    "rating": 1000,
+    "themes": [
+      "endgame-tech",
+      "pawnEndgame",
+      "endgame"
+    ],
+    "gameUrl": "",
+    "title": "Pawn race: count, then run",
+    "explanation": "Count the moves: both pawns need four to promote, and you move first. If Black races, your new queen on a8 checks the king on h8 and also watches h1 along the long diagonal, so Black's pawn cannot safely promote. Every king move here loses."
+  },
+  {
+    "id": "tech-kpk-take-the-opposition",
+    "fen": "8/8/4k3/8/3K4/4P3/8/8 w - - 0 1",
+    "moves": [
+      "d4e4"
+    ],
+    "rating": 900,
+    "themes": [
+      "endgame-tech",
+      "pawnEndgame",
+      "endgame"
+    ],
+    "gameUrl": "",
+    "title": "Take the opposition",
+    "explanation": "Ke4 faces Black's king with one square between them, and now Black must give way. Whichever side Black steps to, your king goes round the other side to d5, e5 or f5, the key squares for this pawn, and the pawn then promotes. Every other move here only draws."
+  },
+  {
+    "id": "tech-kpk-defender-keeps-opposition",
+    "fen": "8/4k3/8/3K4/4P3/8/8/8 b - - 0 1",
+    "moves": [
+      "e7d7",
+      "e4e5",
+      "d7e7",
+      "e5e6",
+      "e7e8"
+    ],
+    "rating": 1000,
+    "themes": [
+      "endgame-tech",
+      "pawnEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Defend by keeping the opposition",
+    "explanation": "Stand in front of the pawn and face White's king: Kd7 now, Ke7 when the pawn reaches e5, and Ke8 when it reaches e6. Stepping straight back in front of the pawn keeps the opposition, so White can never force it through. A side step at any point loses."
+  },
+  {
+    "id": "tech-kpk-last-rank-stalemate",
+    "fen": "4k3/8/3KP3/8/8/8/8/8 b - - 0 1",
+    "moves": [
+      "e8d8",
+      "e6e7",
+      "d8e8"
+    ],
+    "rating": 800,
+    "themes": [
+      "endgame-tech",
+      "pawnEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Pawn on the sixth: keep the opposition",
+    "explanation": "Kd8 faces White's king. If the pawn checks on e7, step back to e8 in front of it. White must then either play Ke6, which is stalemate, or let you take the pawn. Kf8 instead would let White's king reach d7 and escort the pawn home."
+  },
+  {
+    "id": "tech-kpk-rook-pawn-corner",
+    "fen": "8/8/4k3/1K6/P7/8/8/8 b - - 0 1",
+    "moves": [
+      "e6d7",
+      "b5b6",
+      "d7c8",
+      "a4a5",
+      "c8b8",
+      "a5a6",
+      "b8a8"
+    ],
+    "rating": 900,
+    "themes": [
+      "endgame-tech",
+      "pawnEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Rook pawn: run for the corner",
+    "explanation": "A rook pawn draws if the defending king reaches the corner in front of it. Head for c8 and b8 and then sit on a8. White's king cannot drive you out without stalemating you, so the pawn never promotes. Kd7 is the only move that gets there in time."
+  },
+  {
+    "id": "tech-reti-double-threat",
+    "fen": "7K/8/k1P5/7p/8/8/8/8 w - - 0 1",
+    "moves": [
+      "h8g7",
+      "h5h4",
+      "g7f6",
+      "a6b6",
+      "f6e5",
+      "h4h3",
+      "e5d6",
+      "h3h2",
+      "c6c7"
+    ],
+    "rating": 1300,
+    "themes": [
+      "endgame-tech",
+      "pawnEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Chase two goals at once",
+    "explanation": "Your king looks too slow to stop the h-pawn, but a diagonal walk does two jobs at once: it chases the h-pawn and heads for your own pawn. If Black takes time to win c6, you catch the h-pawn. If Black races, you reach d6 or d7 and promote too. Only Kg7 draws."
+  },
+  {
+    "id": "tech-kpkp-give-up-pawn-keep-opposition",
+    "fen": "8/8/1k6/2pK4/2P5/8/8/8 b - - 0 1",
+    "moves": [
+      "b6b7",
+      "d5c5",
+      "b7c7",
+      "c5b5",
+      "c7b7"
+    ],
+    "rating": 1300,
+    "themes": [
+      "endgame-tech",
+      "pawnEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Lose the pawn but keep the opposition",
+    "explanation": "The c5 pawn cannot be held, so plan the position after it falls. Kb7 is a waiting move. When White takes on c5, you answer Kc7 and own the opposition. Kc7 at once would leave you to move after Kxc5, which loses the opposition and the game."
+  },
+  {
+    "id": "tech-kpkp-go-around",
+    "fen": "8/4k3/3p4/3P4/2K5/8/8/8 w - - 0 1",
+    "moves": [
+      "c4b5",
+      "e7f6",
+      "b5b6",
+      "f6f5",
+      "b6c7",
+      "f5e5",
+      "c7c6"
+    ],
+    "rating": 1200,
+    "themes": [
+      "endgame-tech",
+      "pawnEndgame",
+      "endgame"
+    ],
+    "gameUrl": "",
+    "title": "Walk round to the weak pawn",
+    "explanation": "Black's king cannot both protect d6 and keep your king out. March via b5 and b6 to c7. Then Kc6 and Kxd6 follow, and your d-pawn is free to run. Every white move in this line is the only one that keeps the win."
+  },
+  {
+    "id": "tech-kpkp-triangulation",
+    "fen": "8/3k4/3p4/3P4/8/2K5/8/8 w - - 0 1",
+    "moves": [
+      "c3b4",
+      "d7c7",
+      "b4a5",
+      "c7b7",
+      "a5b5"
+    ],
+    "rating": 1400,
+    "themes": [
+      "endgame-tech",
+      "pawnEndgame",
+      "endgame",
+      "zugzwang"
+    ],
+    "gameUrl": "",
+    "title": "Triangulate to pass the move",
+    "explanation": "You want your king on b5 with Black to move. Going from b4 to b5 directly takes one move, but going b4, a5, b5 takes two. That spare tempo puts Black in zugzwang: its king must give way, and yours then gets through to the d6 pawn."
+  },
+  {
+    "id": "tech-rook-v-pawn-king-first",
+    "fen": "8/1K6/8/8/4pk2/8/8/7R w - - 0 1",
+    "moves": [
+      "b7c6"
+    ],
+    "rating": 1300,
+    "themes": [
+      "endgame-tech",
+      "rookEndgame",
+      "endgame"
+    ],
+    "gameUrl": "",
+    "title": "Rook v pawn: count and bring the king",
+    "explanation": "Your rook already stands far behind the pawn. Its job is done, and what decides the race is how fast your king arrives. Kc6 heads straight for the pawn. Any rook move or slower king route lets Black's king and pawn reach the first rank together and draw."
+  },
+  {
+    "id": "tech-lucena-rook-to-the-fourth",
+    "fen": "1K6/1P2k3/8/8/8/8/r7/3R4 w - - 0 1",
+    "moves": [
+      "d1d4",
+      "e7e6",
+      "b8c7",
+      "a2c2",
+      "c7b6"
+    ],
+    "rating": 1500,
+    "themes": [
+      "endgame-tech",
+      "rookEndgame",
+      "endgame"
+    ],
+    "gameUrl": "",
+    "title": "Lucena: rook to the fourth rank",
+    "explanation": "This is the Lucena position. First put your rook on the fourth rank (Rd4), where it can later block checks. Then step out with the king (Kc7) and walk towards the checking rook (Kb6). When the checks reach your rook's rank, it interposes and the pawn queens."
+  },
+  {
+    "id": "tech-lucena-build-the-bridge",
+    "fen": "8/1P6/4k3/1K6/3R4/8/1r6/8 w - - 0 1",
+    "moves": [
+      "d4b4"
+    ],
+    "rating": 1300,
+    "themes": [
+      "endgame-tech",
+      "rookEndgame",
+      "endgame"
+    ],
+    "gameUrl": "",
+    "title": "Lucena: build the bridge",
+    "explanation": "Black's rook keeps checking from the b-file. Rb4 blocks the check, and because your rook is protected by the king, Black has no more useful checks. The pawn promotes next. Kc6 and Ka6 also keep the win, but only by retreating and repeating."
+  },
+  {
+    "id": "tech-philidor-check-from-behind",
+    "fen": "4k3/7R/4PK2/8/8/8/8/r7 b - - 0 1",
+    "moves": [
+      "a1f1"
+    ],
+    "rating": 1300,
+    "themes": [
+      "endgame-tech",
+      "rookEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Philidor: check from behind",
+    "explanation": "In the Philidor defence your rook waits on the sixth rank until the pawn arrives there. Then it drops back and checks from behind. White's king now has no shelter from the checks. Only Rf1+ holds here. Anything else allows Rh8 mate or a decisive king entry."
+  },
+  {
+    "id": "tech-short-side-rook-far",
+    "fen": "6k1/1R1K4/4P3/8/8/8/8/r7 b - - 0 1",
+    "moves": [
+      "a1a8",
+      "e6e7",
+      "g8f7"
+    ],
+    "rating": 1500,
+    "themes": [
+      "endgame-tech",
+      "rookEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Short side: king near, rook far",
+    "explanation": "Your king is on the short side of the pawn and your rook is on the long side, the right split. Ra8 guards the queening square from a distance. If e7, Kf7 attacks the pawn, and e8=Q+ is met by Rxe8. Every other first move loses."
+  },
+  {
+    "id": "tech-vancura-side-attack",
+    "fen": "R7/6k1/P7/8/3K4/8/8/5r2 b - - 0 1",
+    "moves": [
+      "f1f6"
+    ],
+    "rating": 1500,
+    "themes": [
+      "endgame-tech",
+      "rookEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Vancura: attack the pawn from the side",
+    "explanation": "Put your rook on the sixth rank, attacking the a-pawn from the side. White's rook must stay on a8 to guard it, and your rook can check White's king from the side whenever it comes over to help. Rf6 is the only move that draws here."
+  },
+  {
+    "id": "tech-qp-knight-pawn-win",
+    "fen": "6K1/8/8/8/4Q3/8/1p6/2k5 w - - 0 1",
+    "moves": [
+      "e4c4"
+    ],
+    "rating": 1400,
+    "themes": [
+      "endgame-tech",
+      "queenEndgame",
+      "endgame"
+    ],
+    "gameUrl": "",
+    "title": "Queen v b-pawn: start with a check",
+    "explanation": "Against a knight pawn on the seventh, the queen wins by checks and pins until Black's king must block its own pawn on b1. Each time that happens, your king gets a free step closer. Qc4+ is the quickest start. Most other moves let Black hold the draw."
+  },
+  {
+    "id": "tech-qp-centre-pawn-win",
+    "fen": "7K/8/8/8/4Q3/8/3p4/2k5 w - - 0 1",
+    "moves": [
+      "e4c4"
+    ],
+    "rating": 1400,
+    "themes": [
+      "endgame-tech",
+      "queenEndgame",
+      "endgame"
+    ],
+    "gameUrl": "",
+    "title": "Queen v d-pawn: check towards the pawn",
+    "explanation": "With a centre pawn on the seventh, keep checking and pinning until Black's king has to stand on d1 in front of its pawn. That costs Black a tempo, and your king uses it to come one step closer. Repeat until your king arrives. Qc4+ is the quickest start."
+  },
+  {
+    "id": "tech-qp-bishop-pawn-stalemate",
+    "fen": "8/8/8/4K3/8/1Q6/2p5/1k6 b - - 0 1",
+    "moves": [
+      "b1a1",
+      "b3a3",
+      "a1b1"
+    ],
+    "rating": 1200,
+    "themes": [
+      "endgame-tech",
+      "queenEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Queen v c-pawn: hide in the corner",
+    "explanation": "Against a bishop pawn on the seventh, go to the corner, not in front of the pawn. After Ka1, taking c2 is stalemate, and White's king is too far away to help. Kc1 instead gives White the tempo to bring the king closer and win."
+  },
+  {
+    "id": "tech-qp-rook-pawn-stalemate",
+    "fen": "8/8/8/4K3/8/1Q6/p7/1k6 b - - 0 1",
+    "moves": [
+      "b1a1"
+    ],
+    "rating": 1100,
+    "themes": [
+      "endgame-tech",
+      "queenEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Queen v a-pawn: into the corner",
+    "explanation": "With a rook pawn on the seventh, step into the corner in front of it. Black now has no legal move, so White's king cannot come closer without giving stalemate, and the queen alone cannot both keep you boxed in and make progress. Kc1 loses, because the queen gains time."
+  },
+  {
+    "id": "tech-wrong-bishop-corner",
+    "fen": "8/8/3k4/PK6/8/4B3/8/8 b - - 0 1",
+    "moves": [
+      "d6c7"
+    ],
+    "rating": 1100,
+    "themes": [
+      "endgame-tech",
+      "bishopEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Wrong bishop: head for the corner",
+    "explanation": "The a-pawn promotes on a8, a light square, and White's bishop moves on dark squares, so it can never drive your king out of the corner. Kc7 heads for b8 and a8. Once you are there, the game is a draw however White plays."
+  },
+  {
+    "id": "tech-opposite-bishops-guard-d8",
+    "fen": "8/3P4/2K5/8/8/5B2/5b2/k7 b - - 0 1",
+    "moves": [
+      "f2h4"
+    ],
+    "rating": 1100,
+    "themes": [
+      "endgame-tech",
+      "bishopEndgame",
+      "endgame",
+      "planb"
+    ],
+    "gameUrl": "",
+    "title": "Opposite bishops: guard the queening square",
+    "explanation": "The pawn needs d8, a dark square, and only your bishop can cover it. Bh4 guards d8 along the h4-d8 diagonal. The other route via b6 is covered by White's king. If the pawn promotes, take the queen: king and bishop cannot mate. Every other move loses."
+  }
+]

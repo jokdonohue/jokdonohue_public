@@ -1,0 +1,11 @@
+{
+  "source": "opus/puzzle-bank/raw-setup.json",
+  "source_sha256": "c43d8255cc2243102976e36583d9d99fdf3b25b1b78785a9442e8fb114f64f12",
+  "source_entries": 27673,
+  "puzzles_sha256": "1d52eb05a1e8113d8f74d7819ccc939e43fc457db96ee8ef3543f8946b971843",
+  "entries": 2000,
+  "output_sha256": "45a61efcdd8155475131bf15c6f2f2ebcfb38c44fcf6184f264d17a9bda45c2c",
+  "check": "every setup move replayed with chess.js from the raw FEN reproduces the bundled puzzle FEN exactly",
+  "license": "Lichess puzzle database, CC0 1.0",
+  "built": "2026-11-10"
+}
