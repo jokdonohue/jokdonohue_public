@@ -3,7 +3,10 @@
  * idempotent recompute from the attempts this page can see; written a few seconds after practice
  * pauses, so either device may write it and the later write simply wins.
  */
-import { docBytes, prepareWrite, type SessionAttempt, type SnapshotDoc } from '@/src/contract/docs';
+import { docBytes, isSafeCardId, prepareWrite, type SessionAttempt, type SnapshotDoc } from '@/src/contract/docs';
+import type { SafeScore } from './safe';
+import { isPutBack } from './leech';
+import type { DocError } from './model';
 import { dailyCounts } from './daily';
 import type { Progress } from './progress';
 
@@ -24,12 +27,20 @@ export interface SnapshotInput {
   session: { id: string; attempts: readonly SessionAttempt[]; endedAt?: number } | null;
   deviceId: string;
   now: number;
+  /** M2 (D6): the "Safe or not?" score, when the cards are loaded. */
+  safe?: SafeScore | null;
+  /** M2 (D7): leeched card ids (out of the queue, in "Study these"). */
+  leeches?: readonly string[];
+  /** M2 (D10): unreadable agent documents (at most 20 are written). */
+  docErrors?: readonly DocError[];
 }
 
 export function computeSnapshot(input: SnapshotInput): SnapshotDoc {
   const { attempts, progress, now } = input;
+  // "Safe or not?" answers are reported in `safe`, not in the first-try rates (a "Not sure" is not a miss of recall).
+  const practice = attempts.filter(a => !isSafeCardId(a.puzzleId));
   const window = (days: number) => {
-    const list = attempts.filter(a => a.at > now - days * DAY);
+    const list = practice.filter(a => a.at > now - days * DAY);
     return { attempts: list.length, firstTryRate: rate(list.filter(a => a.unassisted).length, list.length) };
   };
   const themes: SnapshotDoc['themes'] = {};
@@ -61,8 +72,11 @@ export function computeSnapshot(input: SnapshotInput): SnapshotDoc {
     due: { count: dueCards.length, overdue: dueCards.filter(([, due]) => due < now - DAY).length, nextIds: dueCards.slice(0, 50).map(([id]) => id) },
     sources,
     packCoverage: { seen, total: pack.size },
-    lastSession: s ? { id: s.id, attempts: s.attempts.length, firstTryRate: rate(s.attempts.filter(a => a.unassisted).length, s.attempts.length), endedAt: s.endedAt ?? null } : null,
+    lastSession: s ? (() => { const answers = s.attempts.filter(a => !isPutBack(a)), own = answers.filter(a => !isSafeCardId(a.puzzleId)); return { id: s.id, attempts: answers.length, firstTryRate: rate(own.filter(a => a.unassisted).length, own.length), endedAt: s.endedAt ?? null }; })() : null,
     today: { date: today.date, reviews: today.reviews, new: today.new },
+    ...(input.leeches ? { leeches: { count: input.leeches.length, ids: [...input.leeches].sort().slice(0, 50) } } : {}),
+    ...(input.safe ? { safe: { answers: input.safe.caught.n + input.safe.trusted.n, caught: { ...input.safe.caught }, trusted: { ...input.safe.trusted } } } : {}),
+    ...(input.docErrors?.length ? { docErrors: input.docErrors.slice(0, 20).map(e => ({ path: e.path.slice(0, 200), issue: e.issue.slice(0, 300), at: e.at })) } : {}),
     device: input.deviceId,
   };
   return prepareWrite<SnapshotDoc>('derived/snapshot', body);

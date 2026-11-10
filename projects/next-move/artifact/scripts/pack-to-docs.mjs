@@ -14,8 +14,8 @@
  * - --validate <docPath> <file.json>  check one agent-written document (plan/current, drills/<id>, notes/<id>, ...)
  *          against the contract schema the page reads it with, the size limit and, for drills, chess.js line
  *          legality; prints every problem and exits 1. The page ignores a WHOLE document that fails (review 2 P2-9).
- * - --m2   write the M2 documents instead (items b, e, g): pack/<ver>-safe-NN, openings/accidents, transfer/history
- *          and pack/meta listing the safe chunks, into --out (default seed_m2/). Streams the engine cache in
+ * - --m2   write the M2 documents instead (items b, e, g): safe/<ver>-NN, openings/accidents, transfer/history
+ *          and safe/meta listing the safe chunks (LAST), into --out (default seed_m2/). Nothing under pack/ (D1). Streams the engine cache in
  *          <src>/cache/. Extra options: --archive-summary <SUMMARY.md> (default ../reviews/claude/data/chesscom_games/
  *          SUMMARY.md), --archive-rows <json> (which SUMMARY rows to carry as context; default seed_inputs/
  *          archive_context.json, git-ignored; no context rows when absent), --transfer-prev <transfer/history.json from a snapshot> (append to it), --per-half <n> (300).
@@ -107,7 +107,7 @@ if (!pack.reconcile.ok && !flag('--allow-mismatch')) { console.error('counts do 
 let docs, counts, note;
 if (m2) {
   ({ docs, counts } = await buildM2(pack));
-  note = 'M2 seed. Apply in order with ArtifactData action "batch" (drop the bytes field). pack/meta (already written by the M1 seed) and transfer/history (if it exists) need their current version as if_version; pack/meta is the last batch.';
+  note = 'M2 seed (lead decision D1: new documents only, nothing under pack/). Apply in order with ArtifactData action "batch" (drop the bytes field), with NO if_version on any entry: a write to a document that already exists is then refused, so nothing existing is overwritten (see scripts/ingest.md, M2 seeding). safe/meta is the last batch.';
 } else {
   // Write order: pack chunks, then plan / note / ingest, then pack/meta LAST.
   docs = [...pack.docs.slice(0, -1), ...seeds, pack.docs[pack.docs.length - 1]];
@@ -131,7 +131,7 @@ docs.forEach((d, i) => {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(d.data));
   const entry = { op: 'set', collection, doc_id: docId, file_path: file, bytes: sizes[i] };
-  const isMeta = d.path === 'pack/meta';
+  const isMeta = d.path === 'pack/meta' || d.path === 'safe/meta';
   if (current.writes.length && (isMeta || current.writes.length >= BATCH_MAX_WRITES || current.bytes + sizes[i] > BATCH_MAX_BYTES)) { batches.push(current); current = { writes: [], bytes: 0 }; }
   current.writes.push(entry); current.bytes += sizes[i];
 });

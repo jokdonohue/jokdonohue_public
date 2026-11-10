@@ -11,7 +11,8 @@ test('pools: sources tagged, ids unique (first wins), punish cards marked, drill
     bank: [base('b1'), base('dup')],
     endgames: [base('e1', ['endgame-tech'])],
     pack: { version: 'v', meta: {} as never, cards: [base('pack-1') as never, base('dup') as never], punish: [base('punish-1') as never], study: [], punishStudy: [] },
-    personal: [base('personal-1', ['personal'])],
+    // A different position: since R-PGN-4 a personal position equal to a pack card's is dropped (m2_ui_requests).
+    personal: [{ ...base('personal-1', ['personal']), fen: '6k1/5ppp/8/8/8/8/5PPP/1R4K1 w - - 0 1' }],
     drills: [{ id: 's', title: 'Back rank', reason: '', cards: [base('agent-s-1') as never], rejected: [] }],
   });
   assert.deepEqual(pools.bySource.bank.map(p => p.id), ['b1']);

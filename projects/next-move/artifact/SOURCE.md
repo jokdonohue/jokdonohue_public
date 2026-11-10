@@ -77,3 +77,8 @@ de795d2e0e577d54c66a9c9f9f7b2869bca0f78e64617116b1e9e54383a6d2bc  tests/fixtures
 ## Tooling
 `node_modules` is a symlink to `../app/node_modules` (esbuild 0.28.0, tsx, typescript, React 19.2.6,
 chess.js, zod). Nothing is installed here.
+
+## M2 changes to copied files (chess-m2-ui, 2026-11-10)
+Checked with `cmp` against `../app/` after the M2 UI work: every copied file under `lib/` and `data/`, `components/PersonalPackSummary.tsx` and the `tests/b2_app_*` copies still match their `app/` source byte for byte. One copied file now differs on purpose:
+- `components/Chessboard.tsx`: M2 adds an `arrow` prop (an SVG arrow over the board, for "Safe or not?" and "Study these"), the exported `squareCentre` helper, and drag to move with pointer events (D11; rules in the new `components/dragMove.ts`). Tap-tap, the promotion dialog and the markup of the 64 squares are unchanged. M2 SHA-256: `6efcbafc43c2dd4338bc7ceb1d1339f948eb33eec114c2773b504e15cb49b66a` (the `app/` hash above, `3a42d…`, is the version-4 source).
+- `styles/app.css` (already adapted) now has every page colour as a token and a system dark theme (Part 4).

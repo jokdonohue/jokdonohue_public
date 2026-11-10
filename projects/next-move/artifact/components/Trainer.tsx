@@ -18,7 +18,7 @@ import CoachPanel from './CoachPanel';
 import FeedbackBar from './FeedbackBar';
 import BackupPanel from './BackupPanel';
 import PunishStudy, { usablePunishStudy } from './PunishStudy';
-import { ConnectionBanner, DailyDone, PlanAndNotes, saveLabel, TodayStrip } from './HomePanels';
+import { ConnectionBanner, DailyDone, DocErrorLine, PlanAndNotes, saveLabel, TodayStrip } from './HomePanels';
 import { useArtifactState } from './useArtifactState';
 import { activePlan, capState, dailyCounts, focusPriors, pickNext } from './daily';
 import { buildPools, fallbackPool, isPunish, type TrainerItem } from './pools';
@@ -27,7 +27,14 @@ import { packForSummary } from './packAdapter';
 import { explainInput, sanLine as sanFrom, type WrongMove } from './coachInput';
 import { backupFilename, buildBackup } from './backup';
 import { computeSnapshot } from './snapshot';
-import { paths } from '@/src/contract/docs';
+import { SafeAnswerPanel, SafeQuestionPanel, SafeScoreLine } from './SafeCard';
+import StudyList from './StudyList';
+import PgnImport from './pgn/PgnImport';
+import { OpeningAccidents, TransferCard } from './GameReadouts';
+import { colorName, type OpeningRow } from './insights';
+import { leechIds, leechState, putBackAttempt, putBackTimes, withPutBacks } from './leech';
+import { chooseSafe, isSafeAttempt, pickWithSafe, safeAttempt, safePool, safeQuestion, safeSchedule, safeScore, type SafeChoice, type SafeQuestion } from './safe';
+import { paths, type SafeCardDoc } from '@/src/contract/docs';
 import { puzzles } from '@/lib/puzzles';
 import { endgameDrills, isEndgameDrill } from '@/lib/endgames';
 import { selectPuzzle, getSkillStats, trainingThemes, type Progress as SchedulerProgress } from '@/lib/scheduler.js';
@@ -51,7 +58,11 @@ const pretty = (s: string) => LABELS[s] ?? s.replace(/([a-z])([A-Z0-9])/g, '$1 $
 // Shown only when the pack contains these sets.
 const PACK_SETS = [['pack-stalemate', 'stalemate', 'Avoid stalemate (your games)'], ['pack-conversion', 'conversion', 'Convert the win (your games)']] as const;
 const PUNISH = 'pack-punish';
-const POOL_FILTERS = ['all', 'personal', 'review', PUNISH, ...PACK_SETS.map(([id]) => id)];
+/** M2 (item b): the "Safe or not?" focus; its cards never enter the ordinary pools. */
+const SAFE = 'pack-safe';
+/** M2 (D8): extra practice over one opening's positions; outside the daily caps. */
+const EXTRA = 'extra-opening';
+const POOL_FILTERS = ['all', 'personal', 'review', PUNISH, SAFE, EXTRA, ...PACK_SETS.map(([id]) => id)];
 /** Item f: pause after a clean answer before the next position (judgement call). */
 export const AUTO_ADVANCE_MS = 1200;
 /** `derived/snapshot` is recomputed this long after the last attempt recorded on this page. */
@@ -75,8 +86,28 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
   const recent = useRef<string[]>([]);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showSources, setShowSources] = useState(false);
+  /** M2 (D13): the PGN import is mounted only once he opens it (its engine starts only on an import). */
+  const [pgnOpen, setPgnOpen] = useState(false);
+  /** M2 "Safe or not?": the question shown (no answer key), then his choice with the card looked up at answer time. */
+  const [safeQ, setSafeQ] = useState<{ q: SafeQuestion; startedAt: number } | null>(null);
+  const [safeAns, setSafeAns] = useState<{ choice: SafeChoice; card: SafeCardDoc; saved: boolean } | null>(null);
+  /** D8: the opening chosen for extra practice and its position ids. */
+  const extra = useRef<{ label: string; ids: string[] } | null>(null);
 
-  const progress = useMemo(() => buildProgress(view.attempts, view.settings, trainingThemes), [view.attempts, view.settings]);
+  // "Safe or not?" answers train a habit, not recall: they stay out of the ordinary schedule and skills (D5).
+  const practiceAttempts = useMemo(() => view.attempts.filter(a => !isSafeAttempt(a)), [view.attempts]);
+  // D7: "Put it back" markers reset a card's lapse days and make it due tomorrow; leeches leave the queue.
+  const putBacks = useMemo(() => putBackTimes(view.putBacks), [view.putBacks]);
+  const progress = useMemo(() => {
+    const built = buildProgress(practiceAttempts, view.settings, trainingThemes);
+    return putBacks.size ? { ...built, cards: withPutBacks(built.cards, putBacks) } : built;
+  }, [practiceAttempts, view.settings, putBacks]);
+  const leechInfo = useMemo(() => leechState(practiceAttempts, putBacks), [practiceAttempts, putBacks]);
+  const leeched = useMemo(() => leechIds(leechInfo), [leechInfo]);
+  const safeQuestions = useMemo(() => (view.safe?.cards ?? []).map(safeQuestion).filter((q): q is SafeQuestion => !!q), [view.safe]);
+  const safeKinds = useMemo(() => new Map((view.safe?.cards ?? []).map(c => [c.id, c.kind] as const)), [view.safe]);
+  const safeSched = useMemo(() => safeSchedule(view.attempts), [view.attempts]);
+  const safeNow = useMemo(() => (safeKinds.size ? safeScore(view.attempts, id => safeKinds.get(id)) : null), [view.attempts, safeKinds]);
   const pools = useMemo(() => buildPools({ bank: puzzles, endgames: endgameDrills, pack: view.pack, personal: view.personal, drills: view.drills }), [view.pack, view.personal, view.drills]);
   const summaryPack = useMemo(() => packForSummary(view.pack), [view.pack]);
   const punishStudy = useMemo(() => usablePunishStudy(view.pack?.punishStudy ?? []), [view.pack]);
@@ -88,11 +119,12 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
   const themeOptions = useMemo(() => [
     ...THEMES,
     ...(pools.own.some(isPunish) ? [[PUNISH, 'Punish it (your games)'] as [string, string]] : []),
+    ...(safeQuestions.length ? [[SAFE, 'Safe or not? (your games)'] as [string, string]] : []),
     ...PACK_SETS.filter(([, set]) => pools.own.some(c => c.pack?.sets?.includes(set))).map(([id, , label]) => [id, label] as [string, string]),
-  ], [pools]);
+  ], [pools, safeQuestions.length]);
 
-  const latest = useRef({ view, progress, pools, mode, theme, active, errors, hints, complete });
-  latest.current = { view, progress, pools, mode, theme, active, errors, hints, complete };
+  const latest = useRef({ view, progress, pools, mode, theme, active, errors, hints, complete, safeQuestions, safeSched, safeNow, leeched });
+  latest.current = { view, progress, pools, mode, theme, active, errors, hints, complete, safeQuestions, safeSched, safeNow, leeched };
 
   const cancelAdvance = useCallback(() => {
     if (advanceTimer.current) clearTimeout(advanceTimer.current);
@@ -119,36 +151,71 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
     if (active && !recorded.current && (errors > 0 || hints > 0)) finish(false, false);
     if (!rehearse) recent.current = [...recent.current.filter(id => id !== p.id), p.id].slice(-5);
     rehearsing.current = rehearse;
+    setSafeQ(null); setSafeAns(null);
     setActive(p); setFen(p.fen); setIndex(0);
     setLastMove(setupMove(p.id) ?? (isPunish(p) && typeof p.pack?.playedUci === 'string' ? p.pack.playedUci : ''));
     setFeedback(''); setComplete(false); setHints(0); setErrors(0); setRevealed(false); setWrong(null); setDailyDone(false);
     recorded.current = false; coached.current = false; firstWrong.current = undefined; started.current = Date.now();
   }
 
+  function startSafe(q: SafeQuestion) {
+    cancelAdvance();
+    if (active && !recorded.current && (errors > 0 || hints > 0)) finish(false, false);
+    recent.current = [...recent.current.filter(id => id !== q.id), q.id].slice(-5);
+    setActive(null); setFeedback(''); setDailyDone(false); setSafeAns(null);
+    setSafeQ({ q, startedAt: Date.now() });
+  }
+  /** Record his verdict (D4). The answer key is looked up only now, from the loaded cards. */
+  function answerSafe(choice: SafeChoice) {
+    if (!safeQ || safeAns) return;
+    const card = latest.current.view.safe?.cards.find(c => c.id === safeQ.q.id);
+    if (!card) { setFeedback('This position is no longer available.'); setSafeQ(null); return; }
+    // Fix pass P2-4: check the result, as `putBack` does; the panel says so when the answer was not saved.
+    const saved = model.record(safeAttempt(safeQ.q, card.kind, choice, safeQ.startedAt, Date.now()));
+    setSafeAns({ choice, card, saved });
+    if (saved) setRecordCount(n => n + 1);
+  }
+
   function choose(nextTheme = theme, nextMode = mode) {
     cancelAdvance();
-    const { view: v, progress: prog, pools: pl } = latest.current;
+    const { view: v, progress: prog, pools: pl, safeQuestions: sq, safeSched: sched, leeched: leechedNow } = latest.current;
     // Leaving a position after help or an incorrect move is still practice evidence.
     if (active && !recorded.current && (errors > 0 || hints > 0)) finish(false, false);
     const now = Date.now();
     const planNow = activePlan(v.plan, now);
     const priors = focusPriors(v.pack?.meta.priors, planNow);
-    const flagged = v.flaggedWrong;
+    // Open "wrong" flags and leeches (D7) are both kept out of selection.
+    const flagged = leechedNow.size ? new Set([...v.flaggedWrong, ...leechedNow]) : v.flaggedWrong;
     const filter = POOL_FILTERS.includes(nextTheme) ? 'all' : nextTheme;
+    if (nextTheme === SAFE) {
+      const q = chooseSafe(safePool(sq, sched, null, now, flagged), sched, recent.current);
+      if (q) { startSafe(q); return; }
+      setActive(null); setSafeQ(null); setSafeAns(null);
+      setFeedback('No “Safe or not?” positions are waiting. Answered ones return later.');
+      return;
+    }
     if (nextTheme === 'all') {
       const capsHere = nextMode === 'today' ? capState(dailyCounts(v.attempts, now), { reviewCap: v.settings.dailyReviewCap, newCap: v.settings.dailyNewCap }) : null;
-      const pick = pickNext<TrainerItem>({
-        pools: pl.bySource, progress: prog, plan: v.plan, priors: v.pack?.meta.priors, flagged, caps: capsHere, excludeIds: recent.current, now,
-        rand: Math.random, select: (pool, p, o) => selectPuzzle(pool, p as unknown as SchedulerProgress, o),
-        withPriors: (p, pr) => withThemePriors(p, pr), fallback: (byS, p) => fallbackPool(byS, p.attempts.length),
+      // D3: a fifth pool with its own share; the other sources keep their proportions within the rest.
+      const safeHere = capsHere?.done ? [] : safePool(sq, sched, capsHere, now, flagged);
+      const both = pickWithSafe({
+        safePool: safeHere, schedule: sched, recent: recent.current, mixSafe: planNow?.mix.safe, r: Math.random(),
+        pickRest: () => pickNext<TrainerItem>({
+          pools: pl.bySource, progress: prog, plan: v.plan, priors: v.pack?.meta.priors, flagged, caps: capsHere, excludeIds: recent.current, now,
+          rand: Math.random, select: (pool, p, o) => selectPuzzle(pool, p as unknown as SchedulerProgress, o),
+          withPriors: (p, pr) => withThemePriors(p, pr), fallback: (byS, p) => fallbackPool(byS, p.attempts.length),
+        }),
       });
+      if ('safe' in both) { startSafe(both.safe); return; }
+      const pick = both.rest;
       if (pick.item) { startPuzzle(pick.item); return; }
-      setActive(null);
+      setActive(null); setSafeQ(null); setSafeAns(null);
       if (pick.reason === 'daily-done') { setDailyDone(true); return; }
       setFeedback('Nothing is available to practise right now.');
       return;
     }
     let pool = pl.all;
+    if (nextTheme === EXTRA) pool = (extra.current?.ids ?? []).map(id => pl.byId.get(id)).filter((p): p is TrainerItem => !!p);
     if (nextTheme === 'personal') pool = pl.own;
     if (nextTheme === 'review') pool = pl.all.filter(p => (prog.cards[p.id]?.due ?? Infinity) <= now);
     if (nextTheme === PUNISH) pool = pl.own.filter(isPunish);
@@ -158,9 +225,10 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
     const selected = selectPuzzle(pool, toSchedulerProgress(withThemePriors(prog, priors)), { theme: filter, now, excludeIds: recentExclusion(pool, filter, recent.current, active?.id) });
     if (selected) startPuzzle(selected);
     else {
-      setActive(null);
+      setActive(null); setSafeQ(null); setSafeAns(null);
       setFeedback(nextTheme === 'review' ? 'No reviews are due. Try mixed practice, or return after your next review is scheduled.'
         : nextTheme === 'personal' ? 'Positions from your games appear here once Claude adds them from your recent games.'
+        : nextTheme === EXTRA ? 'No positions from this opening are available right now.'
         : 'No positions match this focus yet.');
     }
   }
@@ -179,13 +247,14 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
     // Only from confirmed history on a live connection, so a slow start never overwrites the read model (review P2-3).
     if (!recordCount || !view.synced || view.connection !== 'live') return;
     const timer = setTimeout(() => {
-      const { view: v, progress: prog, pools: pl } = latest.current;
+      const { view: v, progress: prog, pools: pl, leeched: lc } = latest.current;
       try {
         const local = sessions.localSessions().find(x => x.id === sessions.sessionId);
         const body = computeSnapshot({
-          attempts: v.attempts, progress: prog, themesOf: trainingThemes, priors: v.pack?.meta.priors, servableIds: pl.all.map(p => p.id),
+          attempts: v.attempts, progress: prog, themesOf: trainingThemes, priors: v.pack?.meta.priors, servableIds: pl.all.filter(p => !lc.has(p.id)).map(p => p.id),
           packIds: pl.own.filter(p => p.source === 'pack').map(p => p.id),
           session: local ? { id: local.id, attempts: local.doc.attempts, endedAt: local.doc.endedAt } : null, deviceId, now: Date.now(),
+          safe: latest.current.safeNow, docErrors: v.docErrors, leeches: [...lc],
         });
         void store.set(paths.snapshot(), body).catch(() => undefined);
       } catch { /* a snapshot that fails validation is skipped; the attempts themselves are saved */ }
@@ -246,8 +315,13 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
 
   function goTab(next: string) { cancelAdvance(); setTab(next); }
   function practiseTheme(t: string) { goTab('practice'); setMode('free'); setTheme(t); choose(t, 'free'); }
+  function practiseOpening(row: OpeningRow, ids: string[]) {
+    extra.current = { label: `${row.opening} as ${colorName(row.color)}`, ids };
+    practiseTheme(EXTRA);
+  }
   function sendFeedback(kind: Parameters<typeof model.sendFeedback>[0]['kind'], text?: string) {
     cancelAdvance();
+    if (safeQ) return model.sendFeedback({ kind, item: { id: safeQ.q.id, source: 'pack', themes: safeQ.q.themes, fen: safeQ.q.fen }, text });
     if (!active) return Promise.resolve(false);
     return model.sendFeedback({ kind, item: { id: active.id, source: active.source, themes: active.themes, fen: active.fen }, playedUci: firstWrong.current, text });
   }
@@ -272,9 +346,11 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
   const coachInput = active && wrong ? explainInput(active, wrong, active.source) : null;
   const skills = getSkillStats(toSchedulerProgress(progress), pools.all) as { theme: string; attempts: number; successes: number; accuracy: number | null; label: string; total: number }[];
   const practiced = skills.filter(s => s.attempts > 0).sort((a, b) => (a.accuracy ?? 1) - (b.accuracy ?? 1));
-  const attempts = view.attempts, clean = attempts.filter(a => a.unassisted).length;
+  const attempts = practiceAttempts, clean = attempts.filter(a => a.unassisted).length;
   // Count due cards whose position is still available (a removed pack must not leave reviews that cannot be served).
-  const due = pools.all.reduce((n, p) => n + Number((progress.cards[p.id]?.due ?? Infinity) <= nowMs), 0);
+  const due = pools.all.reduce((n, p) => n + Number(!leeched.has(p.id) && (progress.cards[p.id]?.due ?? Infinity) <= nowMs), 0);
+  const studyEntries = pools.all.filter(p => leeched.has(p.id)).map(item => ({ item, lapseDays: leechInfo.get(item.id)?.lapseDays ?? 0, windowDays: leechInfo.get(item.id)?.windowDays ?? 0 }));
+  function putBack(item: TrainerItem) { if (model.record(putBackAttempt(item.id, item.source, Date.now()))) setRecordCount(n => n + 1); }
   const unread = view.notes.filter(n => !n.read).length;
   const status = saveLabel(view.connection, view.saveState, sessions.persistent, view.unconfirmed);
   const turn = active ? new Chess(active.fen).turn() : 'w';
@@ -295,8 +371,14 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
         {tab === 'practice' && <section className="page practice-page">
           <TodayStrip counts={counts} caps={capsNow} cap={caps} plan={plan} unread={unread} pretty={pretty} status={status}
             onNotes={() => document.getElementById('from-claude')?.scrollIntoView({ block: 'start' })}/>
-          <div className="page-heading"><div><h1>{mode === 'today' && theme === 'all' ? 'Today’s set' : 'Your next position'}</h1><p>Take your time. Find the idea, then calculate the reply.</p></div></div>
-          {active && !dailyDone ? <div className="practice-layout">
+          <DocErrorLine count={view.docErrors.length}/>
+          <div className="page-heading"><div><h1>{mode === 'today' && theme === 'all' ? 'Today’s set' : theme === EXTRA && extra.current ? `Extra practice: ${extra.current.label}` : 'Your next position'}</h1><p>Take your time. Find the idea, then calculate the reply.</p></div></div>
+          {safeQ && !dailyDone ? (safeAns
+            ? <SafeAnswerPanel key={`a-${safeQ.q.id}`} question={safeQ.q} card={safeAns.card} choice={safeAns.choice} saved={safeAns.saved} score={safeNow} onNext={() => choose()} nextLabel={mode === 'today' && theme === 'all' ? 'Next position' : 'Keep practising'}>
+                <FeedbackBar itemId={safeQ.q.id} onSend={sendFeedback} onInteract={cancelAdvance}/></SafeAnswerPanel>
+            : <SafeQuestionPanel key={`q-${safeQ.q.id}`} question={safeQ.q} onAnswer={answerSafe}>
+                <FeedbackBar itemId={safeQ.q.id} onSend={sendFeedback} onInteract={cancelAdvance}/></SafeQuestionPanel>)
+          : active && !dailyDone ? <div className="practice-layout">
             <div className="board-column">
               <div className="board-top"><span className={`turn-dot ${turn}`}/><strong>{punish ? `You play ${turn === 'w' ? 'White' : 'Black'}: punish it` : `${turn === 'w' ? 'White' : 'Black'} to move`}</strong>
                 <span>{punish ? 'Your opponent’s side' : active.themes.includes('personal') || active.source === 'pack' ? 'From your game' : active.source === 'agent' ? (active.title ?? 'Set from Claude') : isEndgameDrill(active) ? `${drillGoal(active)} · Estimated difficulty ${active.rating}` : `Puzzle difficulty ${active.rating}`}</span></div>
@@ -340,24 +422,36 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
             <select id="theme" value={mode === 'today' && theme === 'all' ? 'today' : theme} onChange={e => { const t = e.target.value; if (t === 'today') { setMode('today'); setTheme('all'); choose('all', 'today'); } else { setMode('free'); setTheme(t); choose(t, 'free'); } }}>
               <option value="today">Today’s set</option>
               {themeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {theme === EXTRA && extra.current && <option value={EXTRA}>{`Extra practice: ${extra.current.label}`}</option>}
             </select>
             <button className="text-button" onClick={() => choose()}><RefreshCw size={16}/>Another position</button></div>
           <PlanAndNotes id="from-claude" plan={plan} notes={view.notes} pretty={pretty} onRead={id => void model.markNoteRead(id)}/>
           <div className="practice-footer"><div><strong>{(puzzles.length + endgameDrills.length).toLocaleString()} positions</strong><span>Tactics, defence, and endgames</span></div><div><strong>{due} due for review</strong><span>Missed or supported answers return sooner</span></div><div><strong>{pools.own.length} personal positions</strong><span>From games you have completed</span></div></div>
+          {studyEntries.length > 0 && <p className="small study-pointer">{`${studyEntries.length} position${studyEntries.length === 1 ? ' is' : 's are'} set aside to study. `}<button type="button" className="link-button" onClick={() => goTab('progress')}>Study these</button></p>}
           {capsNow.done && mode === 'free' && <div className="notice success"><Check size={20}/><span>Today’s set is done. Extra practice still counts.</span><button onClick={() => goTab('progress')}>View progress</button></div>}
         </section>}
         {tab === 'games' && <section className="page"><div className="page-heading"><div><h1>Learn from your games</h1><p>Positions where your games turned, ready to practise.</p></div></div>
           {summaryPack ? <PersonalPackSummary pack={summaryPack} onPractise={() => practiseTheme('personal')}/> : <div className="surface"><h2>Your game positions</h2>
             <p>{pools.own.length ? `${pools.own.length} positions from your games are in your practice.` : 'Positions from your games arrive when Claude analyses your recent games.'}</p>
             {pools.own.length > 0 && <button className="primary" onClick={() => practiseTheme('personal')}>Practise them</button>}</div>}
+          <OpeningAccidents doc={view.openings} isAvailable={id => pools.byId.has(id) && !leeched.has(id)} onPractise={practiseOpening}/>
           <PunishStudy items={punishStudy}/>
-          <div className="surface"><h2>New games</h2><p className="small">Claude adds your newest games from your Chess.com archive in a coaching session. Importing a PGN on this page comes in a later version.</p>
+          <div className="surface"><h2>New games</h2><p className="small">Claude adds your newest games from your Chess.com archive in a coaching session. You can also add games here from a PGN file or a paste.</p>
+            {!pgnOpen && <button type="button" className="secondary" onClick={() => setPgnOpen(true)}>Import games from a PGN</button>}
             {view.settings.chesscomUser && <a href={`https://www.chess.com/games/archive/${encodeURIComponent(view.settings.chesscomUser)}`} target="_blank" rel="noreferrer">Open your game archive on Chess.com</a>}
             <ChesscomUserForm current={view.settings.chesscomUser ?? ''} onSave={name => model.saveSettings({ chesscomUser: name })}/></div>
+
         </section>}
+        {/* Kept mounted (hidden on other tabs) once opened: leaving My games must not stop a running check (it would save nothing). */}
+        {pgnOpen && <div className="page pgn-mount" hidden={tab !== 'games'}><PgnImport store={store} myNames={view.settings.myNames ?? []} chesscomUser={view.settings.chesscomUser}
+          saveMyNames={names => model.saveSettings({ myNames: names })} knownCards={pools.own.map(p => ({ id: p.id, fen: p.fen }))}/></div>}
         {tab === 'learn' && <Learn onTheme={practiseTheme} showSources={showSources} onSourcesShown={() => setShowSources(false)}/>}
         {tab === 'progress' && <section className="page"><div className="page-heading"><div><h1>Your practice, in focus</h1><p>These numbers describe practice. They do not estimate your playing Elo.</p></div></div>
           <div className="stats-row"><div><strong>{attempts.length}</strong><span>Completed attempts</span></div><div><strong>{attempts.length ? `${Math.round(clean / attempts.length * 100)}%` : '—'}</strong><span>Solved without help or errors</span></div><div><strong>{due}</strong><span>Reviews due</span></div><div><strong>{pools.own.length}</strong><span>Positions from your games</span></div></div>
+          {safeNow && safeNow.caught.n + safeNow.trusted.n > 0 && <div className="surface safe-progress"><h2>Safe or not?</h2><SafeScoreLine score={safeNow}/>
+            <p className="fine-print">Two numbers on purpose: answering “It loses something” every time would catch every blunder and trust no sound move. Over your last 50 answers.</p></div>}
+          <TransferCard doc={view.transfer}/>
+          <StudyList entries={studyEntries} onPutBack={putBack}/>
           <div className="progress-layout"><div className="surface"><h2>Themes practised</h2>{!practiced.length ? <p>Complete a few positions to start seeing your practice history here. New themes remain in the mix.</p> : <div className="skill-list">{practiced.map(s => <div key={s.theme} className="skill-row"><div><strong>{pretty(s.theme)}</strong><small>{s.attempts} attempt{s.attempts === 1 ? '' : 's'} · {s.label}</small></div><div className="skill-meter" style={s.attempts < 5 ? { visibility: 'hidden' } : undefined}><div style={{ width: `${(s.accuracy ?? 0) * 100}%` }}/></div><span>{s.attempts < 5 ? '—' : `${Math.round((s.accuracy ?? 0) * 100)}%`}</span></div>)}</div>}<p className="fine-print">A miss, reveal, or hint counts as supported practice. Repeating a known position can improve recall without proving transfer to real games.</p></div>
             <aside className="surface"><h2>Shape your practice</h2>
               <label htmlFor="difficulty">Starting puzzle difficulty</label>

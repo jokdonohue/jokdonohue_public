@@ -77,6 +77,8 @@ export const COLLECTIONS = {
   meta: 'meta', settings: 'settings', sessions: 'sessions', summaries: 'summaries', derived: 'derived',
   games: 'games', personal: 'personal', pack: 'pack', plan: 'plan', drills: 'drills', notes: 'notes',
   feedback: 'feedback', explanations: 'explanations', transfer: 'transfer', ingest: 'ingest', openings: 'openings',
+  /** M2, decision D1: "Safe or not?" cards live here, where a version-4 page never looks. */
+  safe: 'safe',
 } as const;
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];
 
@@ -112,7 +114,19 @@ export const paths = {
   transferHistory: () => 'transfer/history',
   ingestState: () => 'ingest/state',
   openingAccidents: () => 'openings/accidents',
+  /** M2 (D1): `safe/meta`, written LAST, lists the "Safe or not?" chunks. Never listed in `pack/meta`. */
+  safeMeta: () => 'safe/meta',
+  /** M2 (D1): `safe/<ver>-NN` */
+  safeChunk: (packVersion: string, n: number) => assertDocPath(`safe/${packVersion}-${nn(n)}`),
+  /** The full path of a chunk id listed in `safe/meta.chunks`. */
+  safeChunkById: (chunkId: string) => assertDocPath(`safe/${chunkId}`),
 } as const;
+
+/** Parse a "Safe or not?" chunk id (`<ver>-NN`). */
+export function parseSafeChunkId(chunkId: string): { packVersion: string; index: number } | null {
+  const m = /^(.+)-(\d{2,})$/.exec(chunkId);
+  return m && chunkId !== 'meta' ? { packVersion: m[1], index: Number(m[2]) } : null;
+}
 
 /** Parse a pack chunk id (`<ver>-<part>-NN`). */
 export function parsePackChunkId(chunkId: string): { packVersion: string; part: PackPart; index: number } | null {
@@ -165,6 +179,11 @@ export const attemptKey = (a: { puzzleId: string; at: number }) => `${a.puzzleId
 export const puzzleSchema = z.object({
   id: key, fen, moves: z.array(uci).min(1).max(100), rating: nonneg.max(4000), themes,
   gameUrl: z.string().max(2000).optional(), title: z.string().max(200).optional(), explanation: z.string().max(2000).optional(),
+  /**
+   * M2 (fix pass P2-2, R-UI-3): "page" on personal cards made by the page's PGN import. Only those give way to a pack
+   * card on the same position; Site-backup positions (no `origin`) are kept as in version 4. Version 4 strips it.
+   */
+  origin: z.enum(['page']).optional(),
 });
 export type PuzzleDoc = z.infer<typeof puzzleSchema>;
 
@@ -183,6 +202,11 @@ export const settingsDoc = z.object({
   /** Item c caps; defaults 20 reviews and 10 new per day when absent. */
   dailyReviewCap: z.number().int().min(0).max(500).optional(),
   dailyNewCap: z.number().int().min(0).max(200).optional(),
+  /**
+   * M2 (PGN import, R-PGN-1): the names he plays under, matched against PGN player names to find his side.
+   * Stored only here, never in source. A version-4 page drops it on its next settings save (strict schema).
+   */
+  myNames: z.array(z.string().trim().min(1).max(60)).max(10).optional(),
   updatedAt: ms,
   device: segmentId,
 });
@@ -200,6 +224,7 @@ export const sessionDoc = z.object({
 });
 export type SessionDoc = z.infer<typeof sessionDoc>;
 
+export const MAX_DOC_ERRORS = 20;
 const rate = z.number().min(0).max(1).nullable();
 const windowStats = z.object({ attempts: nonneg.int(), firstTryRate: rate });
 /** `derived/snapshot`: the agent read model, a full recompute at session end. */
@@ -219,6 +244,10 @@ export const snapshotDoc = z.object({
   today: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reviews: nonneg.int(), new: nonneg.int() }).optional(),
   /** Item c (M2): cards with 4 or more lapses, moved out of the queue to study notes. */
   leeches: z.object({ count: nonneg.int(), ids: z.array(key).max(50) }).optional(),
+  /** M2 (D6): "Safe or not?" over his last 50 answers, two numbers (never one combined rate). Left out of the windows and themes above. */
+  safe: z.object({ answers: nonneg.int(), caught: z.object({ k: nonneg.int(), n: nonneg.int() }), trusted: z.object({ k: nonneg.int(), n: nonneg.int() }) }).optional(),
+  /** M2 (D10): agent documents the page could not read (newest first, at most 20), so the next coach session sees them. */
+  docErrors: z.array(z.object({ path: z.string().max(200), issue: z.string().max(300), at: ms })).max(MAX_DOC_ERRORS).optional(),
   device: segmentId.optional(),
 });
 export type SnapshotDoc = z.infer<typeof snapshotDoc>;
@@ -341,7 +370,14 @@ export const planDoc = z.object({
   author: z.string().max(80),
   expires: stamp,
   focus: z.array(z.object({ theme: key, weight: z.number().min(0.5).max(3), reason: z.string().max(300) }).passthrough()).max(20),
-  mix: z.object({ bank: z.number().min(0).max(1), pack: z.number().min(0).max(1), endgame: z.number().min(0).max(1), agent: z.number().min(0).max(1) })
+  mix: z.object({
+    bank: z.number().min(0).max(1), pack: z.number().min(0).max(1), endgame: z.number().min(0).max(1), agent: z.number().min(0).max(1),
+    /**
+     * M2 (D3), optional and outside the sum rule: the "Safe or not?" share of a session. Absent = 0.15, 0 = off,
+     * otherwise this number capped at 0.5 (`safeShare`). The four shares above scale down in proportion.
+     */
+    safe: z.number().min(0).max(1).optional(),
+  })
     .passthrough()
     .refine(m => Math.abs(MIX_KEYS.reduce((s, k) => s + m[k], 0) - 1) <= 0.02, 'mix fractions must sum to 1'),
   sessionMinutes: z.number().min(1).max(240).optional(),
@@ -395,6 +431,66 @@ export const openingsDoc = z.object({
 }).passthrough();
 export type OpeningsDoc = z.infer<typeof openingsDoc>;
 
+/** D3: the "Safe or not?" share of a session from `plan.mix.safe` (absent 0.15, 0 off, capped at 0.5). */
+export const SAFE_SHARE_DEFAULT = 0.15;
+export const SAFE_SHARE_MAX = 0.5;
+export function safeShare(mixSafe: number | undefined | null): number {
+  if (mixSafe === undefined || mixSafe === null || !Number.isFinite(mixSafe)) return SAFE_SHARE_DEFAULT;
+  return Math.min(Math.max(mixSafe, 0), SAFE_SHARE_MAX);
+}
+
+/**
+ * A "Safe or not?" card (M2, D1/D4) in a `safe/<ver>-NN` chunk. `fen` is the position BEFORE his move, his side
+ * to move; `moves[0]` is the move he played (the move to judge, never a solution). `kind` and `reveal` are the
+ * answer: the page must not put them in the DOM, an attribute or an aria label before he answers.
+ */
+export const safeCardDoc = z.object({
+  id: segmentId,
+  fen,
+  moves: z.array(uci).min(1).max(32),
+  kind: z.enum(['safe', 'unsafe']),
+  rating: finite.optional(),
+  themes: z.array(key).min(1).max(30),
+  title: z.string().max(200).optional(),
+  /** Pre-answer facts. `playedUci` equals `moves[0]` when present. */
+  question: z.object({ playedUci: uci.optional(), playedSan: z.string().max(12).optional(), side: color.optional() }).passthrough().optional(),
+  /** Post-answer facts. Lines are in SAN (`replyLineSan` after his move; `bestLineSan` from the position). */
+  reveal: z.object({
+    explanation: z.string().max(2000).optional(),
+    playedSan: z.string().max(12).optional(),
+    bestUci: uci.optional(), bestSan: z.string().max(12).optional(),
+    bestLineSan: z.array(z.string().max(12)).max(32).optional(),
+    replyLineUci: z.array(uci).max(32).optional(), replyLineSan: z.array(z.string().max(12)).max(32).optional(),
+    winBefore: finite.nullable().optional(), winAfter: finite.nullable().optional(),
+    gameUrl: z.string().max(300).optional(),
+  }).passthrough().optional(),
+}).passthrough();
+export type SafeCardDoc = z.infer<typeof safeCardDoc>;
+
+/**
+ * "Safe or not?" card ids start with `judge-` (the producer's `judge-<gameId>:<ply>`). The page uses this to
+ * keep these answers out of the ordinary schedule, skills and leech counts even when the safe documents are
+ * not loaded. A producer must keep the prefix.
+ */
+export const SAFE_ID_PREFIX = 'judge-';
+export const isSafeCardId = (id: string) => id.startsWith(SAFE_ID_PREFIX);
+
+/** `safe/<ver>-NN` (M2, D1). */
+export const safeChunkDoc = z.object({
+  packVersion: segmentId.optional(),
+  cards: z.array(safeCardDoc).max(CARDS_PER_CHUNK),
+}).passthrough();
+export type SafeChunkDoc = z.infer<typeof safeChunkDoc>;
+
+/** `safe/meta` (M2, D1), written LAST, after its chunks. Chunk ids are `<packVersion>-NN`. */
+export const safeMetaDoc = z.object({
+  packVersion: segmentId,
+  chunks: z.array(segmentId).max(100),
+  counts: z.record(key, nonneg),
+  importedAt: stamp.optional(),
+}).passthrough();
+export type SafeMetaDoc = z.infer<typeof safeMetaDoc>;
+
 // ---------------------------------------------------------------- path -> schema registry
 
 type AnySchema = z.ZodTypeAny;
@@ -416,12 +512,14 @@ export const DOC_KINDS: Record<CollectionName, { writer: 'page' | 'agent'; schem
   transfer: { writer: 'agent', schema: transferDoc },
   ingest: { writer: 'agent', schema: ingestDoc },
   openings: { writer: 'agent', schema: openingsDoc },
+  safe: { writer: 'agent', schema: safeChunkDoc },
 };
 
 /** The schema for a document path (`pack/meta` is special-cased), or null for an unknown collection. */
 export function schemaForPath(path: string): AnySchema | null {
   assertDocPath(path);
   if (path === 'pack/meta') return packMetaDoc;
+  if (path === 'safe/meta') return safeMetaDoc;
   const collection = path.split('/')[0] as CollectionName;
   return (DOC_KINDS as Record<string, { schema: AnySchema }>)[collection]?.schema ?? null;
 }

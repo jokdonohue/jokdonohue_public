@@ -22,6 +22,7 @@
 import { Chess } from 'chess.js';
 import { stableId } from '../coach/hash';
 import { chunkCards, cmp, positionKey, sanLine, fenAfter } from './packDocs';
+import { paths } from '../contract/docs';
 
 export const SAFE_PRESHOW_FIELDS = ['id', 'fen', 'moves', 'rating', 'themes', 'title', 'question'] as const;
 /** Fields that carry the answer: never render before the learner has judged. */
@@ -53,7 +54,7 @@ const PHASES = ['opening', 'middlegame', 'endgame'] as const;
 const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const r0 = (x: number) => Math.round(x);
 
-interface Candidate { m: JudgedMove; fen: string; game: GameInfo; verdict: 'safe' | 'unsafe'; order: string }
+export interface Candidate { m: JudgedMove; fen: string; game: GameInfo; verdict: 'safe' | 'unsafe'; order: string }
 
 /** Split a total cap into per-phase quotas proportional to `sizes` (largest remainder, phase order breaks ties). */
 export function quotas(sizes: Record<string, number>, cap: number): Record<string, number> {
@@ -100,13 +101,16 @@ export function buildSafeCards(input: { moves: JudgedMove[]; games: Map<string, 
   const matched: Record<string, number> = {};
   for (const ph of PHASES) matched[ph] = Math.min(pool.safe[ph]?.length ?? 0, pool.unsafe[ph]?.length ?? 0);
   const quota = quotas(matched, perHalf);
+  // Pair every chosen blunder with a sound move that looks the same before judging (see pairSafe).
   const chosen: Candidate[] = [];
+  const pairing = { exact: 0, relaxed: 0, noPartner: 0 };
+  const fam = (c: Candidate) => (familiar.has(`${c.m.g}:${c.m.p}`) ? 1 : 0);
   for (const ph of PHASES) {
-    for (const v of ['unsafe', 'safe'] as const) {
-      const fam = (c: Candidate) => (familiar.has(`${c.m.g}:${c.m.p}`) ? 1 : 0);
-      const list = [...(pool[v][ph] ?? [])].sort((a, b) => fam(a) - fam(b) || cmp(a.order, b.order));
-      chosen.push(...list.slice(0, quota[ph] ?? 0));
-    }
+    const unsafe = [...(pool.unsafe[ph] ?? [])].sort((a, b) => fam(a) - fam(b) || cmp(a.order, b.order));
+    const safe = [...(pool.safe[ph] ?? [])].sort((a, b) => cmp(a.order, b.order));
+    const pairs = pairSafe(unsafe, safe, quota[ph] ?? 0, pairing);
+    for (const [u, s] of pairs) chosen.push(u, s);
+    quota[ph] = pairs.length;
   }
   // Interleave the halves: order every card by a hash of its id, so no chunk or position in a chunk hints at the verdict.
   chosen.sort((a, b) => cmp(stableId(`order|${a.m.g}:${a.m.p}`), stableId(`order|${b.m.g}:${b.m.p}`)));
@@ -118,9 +122,61 @@ export function buildSafeCards(input: { moves: JudgedMove[]; games: Map<string, 
     unsafeAlsoInPack: chosen.filter(c => c.verdict === 'unsafe' && familiar.has(`${c.m.g}:${c.m.p}`)).length,
     eligibleSafe: PHASES.reduce((s, ph) => s + (pool.safe[ph]?.length ?? 0), 0),
     eligibleUnsafe: PHASES.reduce((s, ph) => s + (pool.unsafe[ph]?.length ?? 0), 0),
+    pairedExact: pairing.exact, pairedRelaxed: pairing.relaxed, unsafeWithoutPartner: pairing.noPartner,
     ...Object.fromEntries(Object.entries(skipped).map(([k, v]) => [`skipped_${k}`, v])),
   };
   return { cards, counts };
+}
+
+/** The visible features of a candidate, as `surfaceCues` reads them from the finished card. */
+function candidateCues(c: Candidate): SurfaceCues {
+  return surfaceCues({
+    question: { playedSan: sanLine(c.fen, [c.m.pu])[0], side: c.game.ownerColor },
+    title: `x · ${titleCase(c.game.timeClass)}`, fen: c.fen, reveal: { winBefore: c.m.wb },
+  });
+}
+/** Cell keys from strictest to loosest; a pair always shares at least capture, check and the piece moved. */
+const CELLS: Array<(c: SurfaceCues) => string> = [
+  c => `${c.capture}|${c.check}|${c.piece}|${c.side}|${c.timeClass}`,
+  c => `${c.capture}|${c.check}|${c.piece}|${c.timeClass}`,
+  c => `${c.capture}|${c.check}|${c.piece}`,
+];
+/** Distance on the two continuous cues: 1 per move number, 1 per Win% point. */
+const cueDistance = (a: SurfaceCues, b: SurfaceCues) => Math.abs(a.moveNo - b.moveNo) + Math.abs(a.winBefore - b.winBefore);
+/**
+ * Matched pairs (judgement call; closes the answer cues the first M2 build had, see the build log). Blunders are
+ * taken in their fixed order; each gets the unused sound move that shares its capture, check, piece moved, side
+ * and time class (relaxing side, then time class, only when no such move is left) and is nearest in move number
+ * and Win% before (ties: stable order). A blunder with no partner at all is passed over. Deterministic.
+ */
+export function pairSafe(unsafe: Candidate[], safe: Candidate[], want: number, tally = { exact: 0, relaxed: 0, noPartner: 0 }): Array<[Candidate, Candidate]> {
+  const cues = new Map<Candidate, SurfaceCues>();
+  for (const c of [...unsafe, ...safe]) cues.set(c, candidateCues(c));
+  const used = new Set<Candidate>();
+  const byCell = CELLS.map(key => {
+    const m = new Map<string, Candidate[]>();
+    for (const s of safe) (m.get(key(cues.get(s)!)) ?? m.set(key(cues.get(s)!), []).get(key(cues.get(s)!))!).push(s);
+    return m;
+  });
+  const pairs: Array<[Candidate, Candidate]> = [];
+  for (const u of unsafe) {
+    if (pairs.length >= want) break;
+    const cu = cues.get(u)!;
+    let partner: Candidate | null = null, level = -1;
+    for (let i = 0; i < CELLS.length && !partner; i++) {
+      let best = Infinity;
+      for (const s of byCell[i].get(CELLS[i](cu)) ?? []) {
+        if (used.has(s)) continue;
+        const d = cueDistance(cu, cues.get(s)!);
+        if (d < best) { best = d; partner = s; level = i; }
+      }
+    }
+    if (!partner) { tally.noPartner++; continue; }
+    used.add(partner);
+    if (level === 0) tally.exact++; else tally.relaxed++;
+    pairs.push([u, partner]);
+  }
+  return pairs;
 }
 
 function safeCard(c: Candidate, lines: RowLines | undefined): Record<string, unknown> & { kind: 'safe' | 'unsafe' } {
@@ -155,7 +211,55 @@ function safeCard(c: Candidate, lines: RowLines | undefined): Record<string, unk
   };
 }
 
-/** The `pack/<ver>-safe-NN` chunks for these cards. */
+/** What the learner can see before judging, reduced to the features that could hint at the verdict. */
+export interface SurfaceCues { capture: boolean; check: boolean; piece: 'P' | 'N' | 'B' | 'R' | 'Q' | 'K' | 'castle'; side: 'w' | 'b'; timeClass: string; moveNo: number; winBefore: number; /** Game date in days since 1970 (from the title), or NaN. */ day: number }
+export function surfaceCues(card: Record<string, unknown>): SurfaceCues {
+  const q = card.question as { playedSan: string; side: 'w' | 'b' };
+  const san = q.playedSan;
+  const head = san.charAt(0);
+  const piece = san.startsWith('O-O') ? 'castle' : ('NBRQK'.includes(head) ? head : 'P') as SurfaceCues['piece'];
+  const title = String(card.title ?? '');
+  return {
+    capture: san.includes('x'), check: /[+#]$/.test(san), piece, side: q.side,
+    timeClass: (title.split(' · ')[1] ?? '').toLowerCase(),
+    moveNo: Number(String(card.fen).split(' ')[5]) || 0,
+    winBefore: Number((card.reveal as { winBefore?: number } | undefined)?.winBefore ?? 0),
+    day: Date.parse(title.split(' · ')[2] ?? '') / 86_400_000,
+  };
+}
+const pct = (k: number, n: number) => (n ? Math.round((1000 * k) / n) / 10 : 0);
+const mean = (xs: number[]) => (xs.length ? Math.round((10 * xs.reduce((a, b) => a + b, 0)) / xs.length) / 10 : 0);
+/**
+ * Cue table for the two halves: share of each visible feature (percent) and the mean move number and Win% before.
+ * `gap` is safe minus unsafe; a large gap means the feature alone predicts the answer.
+ */
+export function cueTable(cards: Array<Record<string, unknown>>) {
+  const halves = { safe: cards.filter(c => c.kind === 'safe').map(surfaceCues), unsafe: cards.filter(c => c.kind === 'unsafe').map(surfaceCues) };
+  const rows: Array<{ cue: string; unit: '%' | 'mean'; safe: number; unsafe: number; gap: number }> = [];
+  const share = (cue: string, f: (c: SurfaceCues) => boolean) => {
+    const s = pct(halves.safe.filter(f).length, halves.safe.length), u = pct(halves.unsafe.filter(f).length, halves.unsafe.length);
+    rows.push({ cue, unit: '%', safe: s, unsafe: u, gap: Math.round(10 * (s - u)) / 10 });
+  };
+  share('capture', c => c.capture);
+  share('check', c => c.check);
+  for (const p of ['P', 'N', 'B', 'R', 'Q', 'K', 'castle'] as const) share(p === 'P' ? 'pawn move' : p === 'castle' ? 'castling' : `piece ${p}`, c => c.piece === p);
+  share('plays white', c => c.side === 'w');
+  for (const t of [...new Set([...halves.safe, ...halves.unsafe].map(c => c.timeClass))].sort()) share(`time class ${t || '?'}`, c => c.timeClass === t);
+  for (const [cue, f] of [['move number', (c: SurfaceCues) => c.moveNo], ['Win% before', (c: SurfaceCues) => c.winBefore], ['game date (days)', (c: SurfaceCues) => c.day]] as const) {
+    const s = mean(halves.safe.map(f).filter(Number.isFinite)), u = mean(halves.unsafe.map(f).filter(Number.isFinite));
+    rows.push({ cue, unit: 'mean', safe: s, unsafe: u, gap: Math.round(10 * (s - u)) / 10 });
+  }
+  return { n: { safe: halves.safe.length, unsafe: halves.unsafe.length }, rows };
+}
+
+/**
+ * The `safe/<ver>-NN` chunks for these cards (lead decision D1: outside `pack/`, so a version-4 page never reads
+ * them). Same limits as pack chunks (150 cards, 150 KiB); body `{packVersion, cards}`; ids `<ver>-NN`.
+ */
 export function safeChunks(packVersion: string, cards: Array<Record<string, unknown>>) {
-  return chunkCards(packVersion, 'safe', cards);
+  return chunkCards(packVersion, 'safe', cards).map((c, n) => ({
+    path: paths.safeChunk(packVersion, n),
+    id: `${packVersion}-${String(n).padStart(2, '0')}`,
+    data: { packVersion, cards: c.data.cards as Array<Record<string, unknown>> },
+  }));
 }

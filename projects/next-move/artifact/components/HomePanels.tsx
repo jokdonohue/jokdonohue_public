@@ -121,3 +121,14 @@ export function saveLabel(connection: ConnectionState, saveState: SaveState | st
   if (saveState === 'saved') return unconfirmed > 0 ? 'Saving…' : 'Saved';
   return 'Not yet confirmed';
 }
+
+/**
+ * M2 (D10): one quiet line when a document from a coaching session could not be read. The page skips it, as
+ * before, and lists it in `derived/snapshot.docErrors` so the next coaching session sees what to fix.
+ */
+export function DocErrorLine({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return <p className="doc-error-line small" role="status">{count === 1
+    ? 'One item from your coach could not be read; the rest is working.'
+    : `${count} items from your coach could not be read; the rest is working.`}</p>;
+}

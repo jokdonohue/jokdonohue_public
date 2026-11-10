@@ -1,7 +1,8 @@
 /**
- * M2 data documents (plan section 10 items b, e, g), built on top of the M1 pack output:
- * `pack/<ver>-safe-NN`, `openings/accidents`, `transfer/history`, and `pack/meta` rewritten to list the safe
- * chunks (same packVersion, so the M1 chunks stay valid). Pure; `scripts/pack-to-docs.mjs --m2` does the IO.
+ * M2 data documents (plan section 10 items b, e, g), built on top of the M1 pack output: `safe/<ver>-NN`,
+ * `openings/accidents`, `transfer/history`, and `safe/meta` LAST. Lead decision D1: every one is a new document
+ * and nothing under `pack/` is written, so `pack/meta` stays byte-identical and a version-4 page left open never
+ * sees M2 data. Pure; `scripts/pack-to-docs.mjs --m2` does the IO.
  */
 import { paths } from '../contract/docs';
 import { validateDoc, type PackOutput } from './packDocs';
@@ -49,17 +50,18 @@ export function buildM2Docs(input: {
     archiveContext: input.summaryMd && input.archiveRows?.length ? parseArchiveContext(input.summaryMd, input.archiveRows) : [], at: input.at,
   });
   const transfer = appendTransferPoint(input.existingTransfer ?? null, transferPoint(input.profile, { packVersion: pack.packVersion, at: input.at }));
-  const m1Meta = pack.docs[pack.docs.length - 1].data as Record<string, unknown> & { chunks: Record<string, unknown>; counts: Record<string, number> };
+  const m1Meta = pack.docs[pack.docs.length - 1].data as { importedAt?: unknown };
   const meta = {
-    ...m1Meta,
-    counts: { ...m1Meta.counts, ...safe.counts, chunksSafe: chunks.length },
-    chunks: { ...m1Meta.chunks, safe: chunks.map(c => c.id) },
+    packVersion: pack.packVersion,
+    chunks: chunks.map(c => c.id),
+    counts: { ...safe.counts, chunksSafe: chunks.length },
+    ...(m1Meta.importedAt !== undefined ? { importedAt: m1Meta.importedAt } : {}),
   };
   const docs = [
     ...chunks.map(c => ({ path: c.path, data: c.data })),
     { path: paths.openingAccidents(), data: openings },
     { path: paths.transferHistory(), data: transfer },
-    { path: paths.packMeta(), data: meta },
+    { path: paths.safeMeta(), data: meta },
   ];
   for (const d of docs) validateDoc(d.path, d.data);
   return { docs, counts: { ...safe.counts, chunksSafe: chunks.length, openingGroups: (openings.groups as unknown[]).length, archiveContext: (openings.archiveContext as unknown[]).length, transferPoints: (transfer.points as unknown[]).length } };

@@ -12,9 +12,11 @@ import {
   type AttemptSource, type DrillCard, type DrillsDoc, type FeedbackDoc, type PackCardDoc, type PackChunkDoc, type PackMetaDoc,
   type PersonalDoc, type PlanDoc, type PuzzleDoc, type SummaryDoc, drillsDoc,
   type SessionAttempt, type SessionDoc, type SettingsDoc,
+  MAX_DOC_ERRORS, schemaForPath, type OpeningsDoc, type TransferDoc, type SafeCardDoc, type SafeChunkDoc, type SafeMetaDoc,
 } from '@/src/contract/docs';
 import { toStoreError, type ConnectionState, type SaveState, type SessionWriter, type Store, type StoreDoc, type Unsubscribe } from '@/src/contract/store';
 import { DEFAULT_NEW_CAP, DEFAULT_REVIEW_CAP } from './daily';
+import { isPutBack } from './leech';
 
 export interface ModelSettings {
   rating: number;
@@ -22,6 +24,8 @@ export interface ModelSettings {
   dailyReviewCap: number;
   dailyNewCap: number;
   chesscomUser?: string;
+  /** M2 (R-PGN-1): the names he plays under, for the PGN import's side detection. */
+  myNames?: string[];
   updatedAt: number;
 }
 export interface LoadedPack {
@@ -36,6 +40,13 @@ export interface LoadedPack {
   /** Ungraded "punish it" worked examples (`set: "punish"`, punish chunks). Never scheduled, graded or recorded. */
   punishStudy: Array<Record<string, unknown> & { id: string; fen: string }>;
 }
+/** M2 (D1): the "Safe or not?" cards, from `safe/meta` and its chunks. Absent on a database without them (D2). */
+export interface LoadedSafe {
+  version: string;
+  cards: SafeCardDoc[];
+}
+/** M2 (D10): an agent document the page could not read. */
+export interface DocError { path: string; issue: string; at: number }
 export interface NoteView { id: string; text: string; createdAt: number; read: boolean }
 export interface DrillSetView { id: string; title: string; reason: string; cards: DrillCard[]; rejected: Array<{ id: string; reason: string }> }
 export interface TrainerView {
@@ -50,8 +61,10 @@ export interface TrainerView {
   /** Answers on this device that the account database has not positively confirmed (`sessions.unconfirmed()`). */
   unconfirmed: number;
   settings: ModelSettings;
-  /** Every attempt this view knows of, deduplicated by `puzzleId:at`, oldest first. */
+  /** Every attempt this view knows of, deduplicated by `puzzleId:at`, oldest first. "Put it back" markers are not in here. */
   attempts: SessionAttempt[];
+  /** M2 (D7): "Put it back" markers (`putback:<cardId>`), oldest first. */
+  putBacks: SessionAttempt[];
   pack: LoadedPack | null;
   /** The plan document as stored; use `activePlan` to respect `expires`. */
   plan: PlanDoc | null;
@@ -62,6 +75,14 @@ export interface TrainerView {
   drills: DrillSetView[];
   /** Positions from `personal/*` (Site-backup import). */
   personal: PuzzleDoc[];
+  /** M2: "Safe or not?" cards, or null when the database has none (the feature is then absent). */
+  safe: LoadedSafe | null;
+  /** M2 (D8): `openings/accidents`, or null when absent or unreadable. */
+  openings: OpeningsDoc | null;
+  /** M2 (D9): `transfer/history`, or null when absent or unreadable. */
+  transfer: TransferDoc | null;
+  /** M2 (D10): agent documents that failed validation and were skipped (newest first, at most 20). */
+  docErrors: DocError[];
   /** Plain-language problem to show, or ''. */
   error: string;
 }
@@ -78,7 +99,7 @@ export interface TrainerModel {
   subscribe(listener: () => void): Unsubscribe;
   /** Persist one finished attempt (validated first). Returns false when it was invalid. */
   record(attempt: SessionAttempt): boolean;
-  saveSettings(patch: Partial<Pick<SettingsDoc, 'rating' | 'sessionLength' | 'dailyReviewCap' | 'dailyNewCap' | 'chesscomUser'>>): Promise<boolean>;
+  saveSettings(patch: Partial<Pick<SettingsDoc, 'rating' | 'sessionLength' | 'dailyReviewCap' | 'dailyNewCap' | 'chesscomUser' | 'myNames'>>): Promise<boolean>;
   markNoteRead(id: string): Promise<void>;
   sendFeedback(input: FeedbackInput): Promise<boolean>;
   dismissError(): void;
@@ -111,6 +132,7 @@ export function settingsFrom(doc: unknown): ModelSettings {
     rating: s.rating, sessionLength: s.sessionLength, updatedAt: s.updatedAt,
     dailyReviewCap: s.dailyReviewCap ?? DEFAULT_REVIEW_CAP, dailyNewCap: s.dailyNewCap ?? DEFAULT_NEW_CAP,
     ...(s.chesscomUser ? { chesscomUser: s.chesscomUser } : {}),
+    ...(s.myNames?.length ? { myNames: s.myNames } : {}),
   };
 }
 
@@ -171,6 +193,26 @@ function noteFrom(id: string, data: unknown, readLocally: ReadonlySet<string>): 
   return { id, text: doc.data.text, createdAt: Number.isFinite(created) ? created : 0, read: doc.data.readAt !== undefined || readLocally.has(id) };
 }
 
+/** The first validation issues of a document at `path`, in at most 300 characters; '' when it is valid or unknown. */
+export function docIssue(path: string, data: unknown): string {
+  let schema;
+  try { schema = schemaForPath(path); } catch { return 'not a valid document path'; }
+  if (!schema) return '';
+  const parsed = schema.safeParse(data);
+  if (parsed.success) return '';
+  return parsed.error.issues.slice(0, 3).map(i => `${i.path.join('.') || 'document'}: ${i.message}`).join('; ').slice(0, 300);
+}
+
+/** Assemble the "Safe or not?" cards from the chunks that loaded (cards are independent, so a missing chunk only shrinks the set). */
+export function assembleSafe(meta: SafeMetaDoc, chunks: ReadonlyArray<{ id: string; data: unknown } | null>): LoadedSafe {
+  const cards = new Map<string, SafeCardDoc>();
+  for (const chunk of chunks) {
+    const doc = chunk ? readDoc<SafeChunkDoc>(`safe/${chunk.id}`, chunk.data) : null;
+    for (const card of doc?.cards ?? []) if (!cards.has(card.id)) cards.set(card.id, card);
+  }
+  return { version: meta.packVersion, cards: [...cards.values()] };
+}
+
 const PLAIN_ERRORS: Partial<Record<string, string>> = {
   quota_exceeded: 'Storage for this page is full. Your answers stay on this device; Claude can tidy older history.',
   doc_too_large: 'That record is too large to save.',
@@ -197,6 +239,24 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
   let openFeedback: Array<{ id: string; doc: FeedbackDoc }> = [];
   let drills: DrillSetView[] = [];
   let personal: PuzzleDoc[] = [];
+  let safe: LoadedSafe | null = null;
+  let openings: OpeningsDoc | null = null;
+  let transfer: TransferDoc | null = null;
+  let safeToken = 0;
+  let safeRetry: ReturnType<typeof setTimeout> | null = null;
+  /** D10: unreadable agent documents by path; `at` is when this page first saw the current issue. */
+  const docErrors = new Map<string, DocError>();
+  /** Record (or clear, when `issue` is '') the validation problem of an agent document. */
+  function noteDocError(path: string, issue: string) {
+    if (!issue) { docErrors.delete(path); return; }
+    const old = docErrors.get(path);
+    if (old && old.issue === issue) return;
+    docErrors.set(path, { path, issue, at: now() });
+  }
+  /** Clear every recorded problem under a path prefix that is not in `keep`. */
+  function clearDocErrors(prefix: string, keep: ReadonlySet<string> = new Set()) {
+    for (const p of [...docErrors.keys()]) if (p.startsWith(prefix) && !keep.has(p)) docErrors.delete(p);
+  }
   let error = '';
   const recorded = new Map<string, SessionAttempt>();
   const localFlags = new Set<string>();
@@ -215,14 +275,16 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
 
   let view: TrainerView = build();
   function build(): TrainerView {
-    const attempts = collectAttempts(sessionDocs, summaryAttempts, sessions.unconfirmed(), [...recorded.values()]);
+    const all = collectAttempts(sessionDocs, summaryAttempts, sessions.unconfirmed(), [...recorded.values()]);
+    const attempts = all.filter(a => !isPutBack(a)), putBacks = all.filter(isPutBack);
     const flagged = new Set(openFeedback.filter(f => f.doc.kind === 'wrong').map(f => f.doc.itemId));
     for (const id of localFlags) flagged.add(id);
     const notes = noteDocs.map(d => noteFrom(d.id, d.data, readLocally)).filter((n): n is NoteView => !!n).sort((a, b) => b.createdAt - a.createdAt);
     return {
-      ready: isReady(), synced: confirmed.settings && confirmed.sessions, connection: store.connection(), saveState: sessions.saveState(), unconfirmed: sessions.unconfirmed().length, settings, attempts, pack, plan, notes,
+      ready: isReady(), synced: confirmed.settings && confirmed.sessions, connection: store.connection(), saveState: sessions.saveState(), unconfirmed: sessions.unconfirmed().length, settings, attempts, putBacks, pack, plan, notes,
       // A flag on a set id sets the whole drill set aside; flags on card ids are applied by selection.
-      openFeedback, flaggedWrong: flagged, drills: drills.filter(set => !flagged.has(set.id)), personal, error,
+      openFeedback, flaggedWrong: flagged, drills: drills.filter(set => !flagged.has(set.id)), personal, safe, openings, transfer,
+      docErrors: [...docErrors.values()].sort((a, b) => b.at - a.at || (a.path < b.path ? -1 : 1)).slice(0, MAX_DOC_ERRORS), error,
     };
   }
   function emit() {
@@ -266,7 +328,8 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
   }, onError('older history')));
   unsubs.push(store.subscribe(paths.packMeta(), doc => {
     const meta = doc ? readDoc<PackMetaDoc>(paths.packMeta(), doc.data) : null;
-    if (!meta) { packToken++; pack = null; arrived.pack = true; emit(); return; }
+    noteDocError(paths.packMeta(), doc && !meta ? docIssue(paths.packMeta(), doc.data) : '');
+    if (!meta) { packToken++; pack = null; clearDocErrors('pack/', new Set([paths.packMeta()])); arrived.pack = true; emit(); return; }
     if (pack && pack.version === meta.packVersion && JSON.stringify(pack.meta.chunks) === JSON.stringify(meta.chunks)) { pack = { ...pack, meta }; emit(); return; }
     const token = ++packToken;
     if (packRetry) { clearTimeout(packRetry); packRetry = null; }
@@ -275,6 +338,8 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
     const load = (attempt: number) => {
       void Promise.all(ids.map(id => store.get(paths.packChunkById(id)).then(d => (d ? { id, data: d.data } : null), () => null))).then(chunks => {
         if (disposed || token !== packToken) return; // meta changed meanwhile: that load wins
+        clearDocErrors('pack/', new Set([paths.packMeta(), ...ids.map(id => paths.packChunkById(id))]));
+        for (const c of chunks) if (c) noteDocError(paths.packChunkById(c.id), docIssue(paths.packChunkById(c.id), c.data));
         const next = assemblePack(meta, chunks);
         if (next) { pack = next; if (error === PACK_ERROR) error = ''; }
         else {
@@ -286,8 +351,17 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
     };
     load(0);
   }, onError('your personal pack', 'pack')));
-  unsubs.push(store.subscribe(paths.plan(), doc => { plan = doc ? readDoc<PlanDoc>(paths.plan(), doc.data) : null; arrived.plan = true; emit(); }, onError('your plan', 'plan')));
-  unsubs.push(store.subscribeQuery({ collection: 'notes', limit: 200 }, docs => { noteDocs = [...docs]; emit(); }, onError('notes')));
+  unsubs.push(store.subscribe(paths.plan(), doc => {
+    plan = doc ? readDoc<PlanDoc>(paths.plan(), doc.data) : null;
+    noteDocError(paths.plan(), doc && !plan ? docIssue(paths.plan(), doc.data) : '');
+    arrived.plan = true; emit();
+  }, onError('your plan', 'plan')));
+  unsubs.push(store.subscribeQuery({ collection: 'notes', limit: 200 }, docs => {
+    noteDocs = [...docs];
+    clearDocErrors('notes/', new Set(docs.map(d => d.path)));
+    for (const d of docs) noteDocError(d.path, docIssue(d.path, d.data));
+    emit();
+  }, onError('notes')));
   unsubs.push(store.subscribeQuery({ collection: 'feedback', where: [['status', '==', 'open']], limit: 1000 }, docs => {
     openFeedback = docs.map(d => ({ id: d.id, doc: readDoc<FeedbackDoc>(d.path, d.data) })).filter((f): f is { id: string; doc: FeedbackDoc } => !!f.doc);
     // A local flag is kept until its document is visible; it lasts at most this page load.
@@ -296,9 +370,11 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
   }, onError('feedback', 'feedback')));
   unsubs.push(store.subscribeQuery({ collection: 'drills', where: [['active', '==', true]], limit: 50 }, docs => {
     drills = [];
+    clearDocErrors('drills/', new Set(docs.map(d => d.path)));
     for (const d of docs) {
       const doc = readDoc<DrillsDoc>(d.path, d.data);
       if (!doc) {
+        noteDocError(d.path, docIssue(d.path, d.data) || 'unreadable');
         // The whole document fails the contract: tell the writing session through `rejected` (review P2-9).
         const problem = drillsDoc.safeParse(d.data);
         const reason = problem.success ? 'unreadable' : problem.error.issues.slice(0, 3).map(i => `${i.path.join('.') || 'document'}: ${i.message}`).join('; ').slice(0, 300);
@@ -321,11 +397,43 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
     for (const d of docs) for (const p of readDoc<PersonalDoc>(d.path, d.data)?.puzzles ?? []) if (!seen.has(p.id)) seen.set(p.id, p);
     personal = [...seen.values()]; emit();
   }, onError('your game positions')));
+  // M2 (D1, D2): "Safe or not?" cards. Never part of `ready`; absent, refused or unreadable means no feature, no banner.
+  unsubs.push(store.subscribe(paths.safeMeta(), doc => {
+    const meta = doc ? readDoc<SafeMetaDoc>(paths.safeMeta(), doc.data) : null;
+    noteDocError(paths.safeMeta(), doc && !meta ? docIssue(paths.safeMeta(), doc.data) : '');
+    const token = ++safeToken;
+    if (safeRetry) { clearTimeout(safeRetry); safeRetry = null; }
+    if (!meta) { safe = null; clearDocErrors('safe/', new Set([paths.safeMeta()])); emit(); return; }
+    const load = (attempt: number) => {
+      void Promise.all(meta.chunks.map(id => store.get(paths.safeChunkById(id)).then(d => (d ? { id, data: d.data } : null), () => null))).then(chunks => {
+        if (disposed || token !== safeToken) return;
+        clearDocErrors('safe/', new Set([paths.safeMeta(), ...meta.chunks.map(id => paths.safeChunkById(id))]));
+        for (const c of chunks) if (c) noteDocError(paths.safeChunkById(c.id), docIssue(paths.safeChunkById(c.id), c.data));
+        safe = assembleSafe(meta, chunks);
+        // A chunk that did not arrive is tried once more; its cards are simply absent meanwhile.
+        if (attempt < 1 && chunks.some(c => !c)) safeRetry = setTimeout(() => { safeRetry = null; if (started) load(attempt + 1); }, packRetryMs);
+        emit();
+      });
+    };
+    load(0);
+  }, () => { safe = null; emit(); }));
+  // M2 (D8, D9): agent read-outs. Never part of `ready`; absent or unreadable means the section is not shown.
+  unsubs.push(store.subscribe(paths.openingAccidents(), doc => {
+    openings = doc ? readDoc<OpeningsDoc>(paths.openingAccidents(), doc.data) : null;
+    noteDocError(paths.openingAccidents(), doc && !openings ? docIssue(paths.openingAccidents(), doc.data) : '');
+    emit();
+  }, () => { openings = null; emit(); }));
+  unsubs.push(store.subscribe(paths.transferHistory(), doc => {
+    transfer = doc ? readDoc<TransferDoc>(paths.transferHistory(), doc.data) : null;
+    noteDocError(paths.transferHistory(), doc && !transfer ? docIssue(paths.transferHistory(), doc.data) : '');
+    emit();
+  }, () => { transfer = null; emit(); }));
   unsubs.push(store.onConnection(() => emit()));
   unsubs.push(sessions.onSaveState((_state, e) => { if (e && toStoreError(e).code === 'quota_exceeded') error = PLAIN_ERRORS.quota_exceeded!; emit(); }));
   const timer = setTimeout(() => { timedOut = true; emit(); }, options.readyTimeoutMs ?? 10_000);
   unsubs.push(() => clearTimeout(timer));
   unsubs.push(() => { if (packRetry) clearTimeout(packRetry); packRetry = null; });
+  unsubs.push(() => { if (safeRetry) clearTimeout(safeRetry); safeRetry = null; });
   }
   function stop() { started = false; for (const u of unsubs.splice(0)) u(); }
   if (!options.lazy) start();

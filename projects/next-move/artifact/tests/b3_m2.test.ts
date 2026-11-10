@@ -4,17 +4,17 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Chess } from 'chess.js';
-import { buildSafeCards, quotas, SAFE_PRESHOW_FIELDS, type GameInfo, type JudgedMove, type RowLines } from '../src/importers/safeDocs';
+import { buildSafeCards, cueTable, quotas, SAFE_PRESHOW_FIELDS, type GameInfo, type JudgedMove, type RowLines } from '../src/importers/safeDocs';
 import { buildOpeningAccidents, parseArchiveContext, readArchiveRows, wilson, MIN_RANKED_GAMES } from '../src/importers/openingsDocs';
 import { appendTransferPoint, transferPoint } from '../src/importers/transferDocs';
 import { buildM2Docs } from '../src/importers/m2Docs';
 import { buildPackDocs, previousIdsFromDocs } from '../src/importers/packDocs';
-import { docBytes, MAX_DOC_BYTES, readDoc, packChunkIds, type PackMetaDoc } from '../src/contract/docs';
+import { docBytes, MAX_DOC_BYTES, readDoc, type SafeMetaDoc } from '../src/contract/docs';
 import { PROFILE, jsonl, rng, syntheticRows } from './b3_fixtures';
 import { PROFILE_DIR, SEED_DIR, SEED_INPUTS_DIR } from './b3_paths';
 
 /** Synthetic engine cache: random games (White = owner), every owner move judged. */
-function syntheticCache(nGames: number, seed = 1) {
+function syntheticCache(nGames: number, seed = 1, pBlunder: (san: string) => number = () => 0.3) {
   const rand = rng(seed);
   const games = new Map<string, GameInfo>(), moves: JudgedMove[] = [], rows = new Map<string, RowLines>();
   for (let gi = 0; gi < nGames; gi++) {
@@ -28,7 +28,8 @@ function syntheticCache(nGames: number, seed = 1) {
     for (let p = 1; p <= ucis.length; p += 2) {
       const fen = fens[p - 1], legal = new Chess(fen).moves({ verbose: true });
       const other = legal.find(x => x.from + x.to + (x.promotion ?? '') !== ucis[p - 1]);
-      const blunder = rand() < 0.3;
+      const played = legal.find(x => x.from + x.to + (x.promotion ?? '') === ucis[p - 1])!;
+      const blunder = rand() < pBlunder(played.san);
       const ph = p < 20 ? 'opening' : p < 40 ? 'middlegame' : 'endgame';
       const bm = blunder && other ? other.from + other.to + (other.promotion ?? '') : ucis[p - 1];
       moves.push({ g, p, mn: Math.ceil(p / 2), ph, j: blunder ? 'blunder' : null, wb: rand() < 0.15 ? 90 : 50, wa: blunder ? 20 : 48.7, drop: blunder ? 30 : 0.5, bm, pu: ucis[p - 1], best: !blunder, mate: false, sec: 3 });
@@ -52,6 +53,29 @@ test('safe or not: deterministic, half and half overall and in every phase', () 
   const firstTen = a.cards.slice(0, 10).map(x => x.kind);
   assert.ok(firstTen.includes('safe') && firstTen.includes('unsafe'));
 });
+
+test('safe or not: the visible features do not give the answer away (matched pairs)', () => {
+  // Invented bias: captures and checks are blunders far less often, so an unmatched draw would differ by a lot.
+  const biased = syntheticCache(60, 12, san => (/[+#]$/.test(san) ? 0.05 : san.includes('x') ? 0.1 : 0.45));
+  const { cards, counts } = buildSafeCards({ ...biased, perHalf: 80 });
+  assert.equal(counts.safeCards, counts.unsafeCards);
+  assert.ok(counts.safeCards >= 40, `enough cards: ${counts.safeCards}`);
+  const table = cueTable(cards);
+  const gap = (cue: string) => Math.abs(table.rows.find(r => r.cue === cue)!.gap);
+  for (const cue of ['capture', 'check', 'pawn move', 'piece N', 'piece B', 'piece R', 'piece Q', 'piece K', 'castling', 'plays white', 'time class rapid']) assert.ok(gap(cue) <= 2, `${cue} gap ${gap(cue)}`);
+  assert.ok(gap('move number') <= 2 && gap('Win% before') <= 2, JSON.stringify(table.rows.slice(-3)));
+  // The unmatched pools really were biased (so the test would catch a regression to unmatched sampling).
+  const pool = (v: 'safe' | 'unsafe') => biased.moves.filter(m => (v === 'unsafe' ? m.j === 'blunder' : m.j === null) && m.wb === 50);
+  const capShare = (v: 'safe' | 'unsafe') => { const ms = pool(v); return ms.filter(m => sanOf(biased.games.get(m.g)!.fens[m.p - 1], m.pu).includes('x')).length / ms.length; };
+  assert.ok(capShare('safe') - capShare('unsafe') > 0.1, 'synthetic pools differ on captures');
+  // Per phase, both halves are the same size; same input, same output.
+  for (const ph of ['opening', 'middlegame', 'endgame']) {
+    const n = (v: string) => cards.filter(x => x.kind === v && (x.themes as string[])[2] === ph).length;
+    assert.equal(n('safe'), n('unsafe'), ph);
+  }
+  assert.equal(JSON.stringify(buildSafeCards({ ...biased, perHalf: 80 }).cards), JSON.stringify(cards));
+});
+const sanOf = (fen: string, uci: string) => new Chess(fen).move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] }).san;
 
 test('safe or not: no leakage of the answer in the fields shown before judging', () => {
   const { cards } = buildSafeCards({ ...syntheticCache(40, 5), perHalf: 80 });
@@ -144,21 +168,25 @@ test('transfer history: first point from the pass; a refresh appends, a rerun re
   assert.deepEqual((doc2.points as Array<{ packVersion: string }>).map(p => p.packVersion), ['p1', 'p2']);
 });
 
-test('M2 docs pass the contract and the size limit; pack/meta keeps the M1 chunks and adds the safe ones', () => {
+test('M2 docs (D1): new paths only, safe/meta last lists the safe/<ver>-NN chunks, contract and size limit', () => {
   const pack = buildPackDocs({ profile: PROFILE, positions: jsonl(syntheticRows(20, { seed: 4 })), special: '' });
   const c = syntheticCache(20, 2);
   const profile = { ...PROFILE, openings: [], conversion: { gamesWinningBy3: 10, notWon: 4, notWonShare: 0.4, notWonShareCi95: [0.17, 0.66], byOutcome: { time: 2, mated: 1, other: 1 } }, overall: { blundersPer100: 6.13, ci95: [5.72, 6.61] } };
   const out = buildM2Docs({ pack, profile, ...c, rowLines: c.rows, openingRows: [], gameFamily: new Map(), at: PROFILE.generatedAt, perHalf: 30 });
-  assert.equal(out.docs[out.docs.length - 1].path, 'pack/meta', 'meta last');
+  const paths = out.docs.map(d => d.path);
+  assert.equal(paths[paths.length - 1], 'safe/meta', 'safe/meta last');
+  assert.ok(paths.every(p => !p.startsWith('pack/')), 'nothing under pack/: pack/meta and the M1 chunks stay as written');
   for (const d of out.docs) { assert.ok(docBytes(d.data) <= MAX_DOC_BYTES); assert.notEqual(readDoc(d.path, d.data), null, d.path); }
-  const meta = readDoc<PackMetaDoc>('pack/meta', out.docs[out.docs.length - 1].data)!;
-  const m1 = readDoc<PackMetaDoc>('pack/meta', pack.docs[pack.docs.length - 1].data)!;
-  assert.deepEqual(meta.chunks.cards, m1.chunks.cards);
-  assert.equal(meta.packVersion, m1.packVersion);
-  assert.ok((meta.chunks.safe ?? []).length >= 1);
-  assert.deepEqual(packChunkIds(meta).filter(id => id.includes('-safe-')), meta.chunks.safe);
+  const meta = readDoc<SafeMetaDoc>('safe/meta', out.docs[out.docs.length - 1].data)!;
+  assert.equal(meta.packVersion, pack.packVersion);
+  assert.ok(meta.chunks.length >= 1);
+  assert.deepEqual(paths.filter(p => /^safe\/(?!meta$)/.test(p)), meta.chunks.map(id => `safe/${id}`), 'listed chunks are written, in order');
+  for (const id of meta.chunks) assert.match(id, new RegExp(`^${pack.packVersion}-\\d{2}$`));
+  const cards = out.docs.filter(d => d.path.startsWith('safe/') && d.path !== 'safe/meta').flatMap(d => (d.data as { cards: Array<{ kind: string; id: string }> }).cards);
+  assert.equal(cards.length, meta.counts.safeCards + meta.counts.unsafeCards);
+  assert.ok(cards.every(c => (c.kind === 'safe' || c.kind === 'unsafe') && c.id.startsWith('judge-')));
   // A snapshot holding safe chunks must not feed judge-* ids into the pack's previousIds.
-  const prev = previousIdsFromDocs(out.docs.filter(d => d.path !== 'pack/meta' && d.path.startsWith('pack/')).map(d => d.data).concat(pack.docs.slice(0, -1).map(d => d.data)));
+  const prev = previousIdsFromDocs(out.docs.filter(d => d.path.startsWith('safe/') && d.path !== 'safe/meta').map(d => d.data as Record<string, unknown>).concat(pack.docs.slice(0, -1).map(d => d.data)));
   assert.ok(Object.values(prev).every(id => !id.startsWith('judge-')));
 });
 
