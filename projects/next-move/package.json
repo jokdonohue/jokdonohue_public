@@ -1,0 +1,9 @@
+{
+  "name": "next-move",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repository test entry for the Next Move chess trainer; runs the app's tests, installing its pinned dependencies first when they are missing.",
+  "scripts": {
+    "test": "cd app && (test -d node_modules || npm ci --ignore-scripts --no-audit --no-fund) && npm test"
+  }
+}

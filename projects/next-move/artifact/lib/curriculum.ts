@@ -1,0 +1,573 @@
+export type Principle = {
+  id: string;
+  title: string;
+  category: string;
+  body: string;
+  cue: string;
+  sourceIds: string[];
+};
+
+export type CurriculumSource = {
+  id: string;
+  title: string;
+  author: string;
+  url: string;
+  note: string;
+};
+
+export type OpeningDrill = {
+  id: string;
+  name: string;
+  side: 'w' | 'b';
+  moves: string[];
+  notes: string[];
+  sourceIds: string[];
+};
+
+// Original teaching summaries, checked against the linked sources on 2026-11-08.
+// These are qualified decision cues, not rules that override concrete calculation.
+export const principles: Principle[] = [
+  {
+    id: 'what-changed',
+    title: 'Read the last move',
+    category: 'Calculation',
+    body: 'Notice new attacks, opened lines, and abandoned defenders before continuing your plan.',
+    cue: 'What can they do now?',
+    sourceIds: ['heisman-thought'],
+  },
+  {
+    id: 'compare-candidates',
+    title: 'Compare credible candidates',
+    category: 'Calculation',
+    body: 'Keep a promising move in reserve while checking an alternative. Compare the resulting positions, not just the first moves.',
+    cue: 'What is my other candidate?',
+    sourceIds: ['heisman-thought'],
+  },
+  {
+    id: 'best-reply',
+    title: 'Give the opponent their best reply',
+    category: 'Calculation',
+    body: 'Test the reply that most challenges your idea. A line that works only after cooperation is not a sound combination.',
+    cue: 'How would I refute this?',
+    sourceIds: ['heisman-thought'],
+  },
+  {
+    id: 'forcing-scan',
+    title: 'Check forcing moves for both sides',
+    category: 'Calculation',
+    body: 'Inspect checks, captures, and serious threats before committing. They are candidates to calculate, not automatic instructions to attack.',
+    cue: 'What forces a reply?',
+    sourceIds: ['heisman-safety'],
+  },
+  {
+    id: 'quiet-endpoint',
+    title: 'Finish the exchange',
+    category: 'Calculation',
+    body: 'Follow relevant recaptures and forcing replies before counting material. Stop at a position whose immediate tactics you have resolved.',
+    cue: 'What happens after the recapture?',
+    sourceIds: ['heisman-safety'],
+  },
+  {
+    id: 'loose-pieces',
+    title: 'Track loose pieces',
+    category: 'Tactics',
+    body: 'Find undefended units on both sides, including after your intended move. Their presence is a warning to investigate, not proof of a tactic.',
+    cue: 'What becomes unguarded?',
+    sourceIds: ['heisman-safety'],
+  },
+  {
+    id: 'fork-targets',
+    title: 'Search for two targets',
+    category: 'Tactics',
+    body: 'Look for a square that attacks two valuable targets, especially with check. Then check the replies: the fork works only if no single move, including capturing the forking piece, answers both threats.',
+    cue: 'Which two targets share an attacker?',
+    sourceIds: ['chesscom-fork'],
+  },
+  {
+    id: 'pin-limits',
+    title: 'Distinguish absolute and relative pins',
+    category: 'Tactics',
+    body: 'A piece pinned to its king cannot leave the line of the pin, though a move along it may be legal. A relative pin is to any other valuable piece, such as a queen or rook: the pinned piece may move, but it gives up what stands behind it unless the move creates a stronger threat.',
+    cue: 'What is behind the pinned piece?',
+    sourceIds: ['chesscom-pin', 'fide-laws'],
+  },
+  {
+    id: 'escape-pin',
+    title: 'Have an unpinning plan',
+    category: 'Tactics',
+    body: 'Consider capturing the pinning piece, blocking its line, or moving the target behind your pinned piece. Check whether the opponent can add pressure first.',
+    cue: 'Which part of the pin can I change?',
+    sourceIds: ['chesscom-pin'],
+  },
+  {
+    id: 'discovered-lines',
+    title: 'Look through the front piece',
+    category: 'Tactics',
+    body: 'When a piece blocks your rook, bishop, or queen, inspect moves that uncover an attack. A forcing move by the front piece can create two threats.',
+    cue: 'What attack appears when this moves?',
+    sourceIds: ['chesscom-discovery'],
+  },
+  {
+    id: 'zwischenzug',
+    title: 'Pause before recapturing',
+    category: 'Tactics',
+    body: 'Before an expected recapture, inspect a stronger check or threat for either side. An intermediate move can change the exchange sequence completely.',
+    cue: 'Is there something more forcing first?',
+    sourceIds: ['chesscom-zwischenzug'],
+  },
+  {
+    id: 'remove-defender',
+    title: 'Test the defender',
+    category: 'Tactics',
+    body: 'A defended piece may still be vulnerable if its guard can be captured, diverted, or pinned. Calculate the removal before counting that guard as reliable.',
+    cue: 'Can this defender do its job?',
+    sourceIds: ['heisman-middlegame'],
+  },
+  {
+    id: 'back-rank',
+    title: 'Audit the back rank',
+    category: 'King safety',
+    body: 'Before moving a defender or grabbing material, inspect enemy access to your back rank and your king\'s actual escape squares.',
+    cue: 'Can my king escape?',
+    sourceIds: ['heisman-safety'],
+  },
+  {
+    id: 'safe-castling',
+    title: 'Prepare a safe home for the king',
+    category: 'King safety',
+    body: 'Develop with castling in mind. Before castling, check the destination and pawn cover; legality alone does not make that side safe.',
+    cue: 'Where will my king be safer?',
+    sourceIds: ['heisman-openings'],
+  },
+  {
+    id: 'attack-with-team',
+    title: 'Bring enough pieces to the attack',
+    category: 'King safety',
+    body: 'Compare attackers, defenders, and entry squares before sacrificing. If the attack lacks support, improve a piece while keeping your own king secure.',
+    cue: 'Who can join the attack?',
+    sourceIds: ['heisman-middlegame'],
+  },
+  {
+    id: 'convert-safely',
+    title: 'Protect an advantage',
+    category: 'King safety',
+    body: 'When ahead, check counterplay and coordinate your pieces before chasing more material. Secure does not mean passive.',
+    cue: 'What is their remaining chance?',
+    sourceIds: ['heisman-middlegame'],
+  },
+  {
+    id: 'idle-piece',
+    title: 'Give the idle piece a job',
+    category: 'Opening plans',
+    body: 'When no tactic demands attention, develop an unused piece before improving an already active one. Avoid squares where a pawn can chase it usefully.',
+    cue: 'Which piece is still waiting?',
+    sourceIds: ['heisman-openings'],
+  },
+  {
+    id: 'pawn-break',
+    title: 'Know your pawn break',
+    category: 'Opening plans',
+    body: 'Identify the pawn advance that challenges the center. Place pieces to support it and calculate exchanges before opening lines near your king.',
+    cue: 'Which pawn move changes the position?',
+    sourceIds: ['heisman-openings'],
+  },
+  {
+    id: 'beyond-script',
+    title: 'Remember the reason',
+    category: 'Opening plans',
+    body: 'Associate a rehearsed move with its purpose. After an unfamiliar reply, reassess threats, development, and king safety before continuing the sequence.',
+    cue: 'Does the old plan still fit?',
+    sourceIds: ['heisman-openings'],
+  },
+  {
+    id: 'name-threat',
+    title: 'Check that you can meet the threat',
+    category: 'Defense',
+    body: 'Before choosing a move, check that you can answer the threats it allows. Do not wait for the reply to discover whether your defense works.',
+    cue: 'Can I meet their strongest threat?',
+    sourceIds: ['heisman-thought'],
+  },
+  {
+    id: 'safe-replies',
+    title: 'Find the safe replies',
+    category: 'Defense',
+    body: 'Under tactical pressure, identify which candidate replies avoid forced material loss or mate. Compare their other merits after checking safety.',
+    cue: 'Which replies survive their forcing moves?',
+    sourceIds: ['heisman-safety'],
+  },
+  {
+    id: 'active-resistance',
+    title: 'Preserve practical counterplay',
+    category: 'Defense',
+    body: 'When worse, inspect active threats and passed pawns alongside direct defense. Choose problems the opponent must solve, while checking that your own king survives.',
+    cue: 'What forces them to think?',
+    sourceIds: ['smerdon-swindler'],
+  },
+  {
+    id: 'defensive-exchanges',
+    title: 'Trade toward a specific ending',
+    category: 'Defense',
+    body: 'When material down, usually avoid equal piece trades that reduce your counterplay, and consider pawn trades that improve drawing chances. Override this guideline when a calculated exchange reaches a holdable ending.',
+    cue: 'Is that ending easier to hold?',
+    sourceIds: ['heisman-endgames'],
+  },
+  {
+    id: 'draw-resources',
+    title: 'Search for a drawing resource',
+    category: 'Defense',
+    body: 'Look for repeatable checks, stalemate, or a blockade when worse. Verify the opponent cannot escape or break through; several checks alone do not establish a draw.',
+    cue: 'Can I make progress impossible?',
+    sourceIds: ['smerdon-swindler', 'fide-laws'],
+  },
+  {
+    id: 'active-king',
+    title: 'Activate the king when safe',
+    category: 'Endgames',
+    body: 'With mating threats controlled, bring your king toward useful squares and pawns. Keep checking enemy checks and promotion threats along its route.',
+    cue: 'Where can my king help?',
+    sourceIds: ['heisman-endgames'],
+  },
+  {
+    id: 'active-rook',
+    title: 'Keep the rook useful',
+    category: 'Endgames',
+    body: 'Seek active files, checks, and access behind passed pawns. Do not immobilize the rook to protect a pawn without comparing active alternatives.',
+    cue: 'Can my rook do more?',
+    sourceIds: ['heisman-endgames'],
+  },
+  {
+    id: 'support-passer',
+    title: 'Support the passed pawn',
+    category: 'Endgames',
+    body: 'Advance a passer with support or a calculated promotion race. An extra step is no improvement if the pawn becomes easy to capture.',
+    cue: 'Who protects its next square?',
+    sourceIds: ['heisman-endgames'],
+  },
+  {
+    id: 'opposition',
+    title: 'Use opposition to gain access',
+    category: 'Endgames',
+    body: 'With kings facing across one square, the side to move may have to yield ground. Use opposition to reach key squares; pawn moves and obstacles can change the result.',
+    cue: 'Who must give way?',
+    sourceIds: ['chesscom-opposition'],
+  },
+  {
+    id: 'pawn-square',
+    title: 'Check the pawn race',
+    category: 'Endgames',
+    body: 'For a lone unsupported passer, draw its square toward promotion. A king entering in time can catch it if its route is clear and safe; account for whose turn it is and an initial double step.',
+    cue: 'Can the king enter the square in time?',
+    sourceIds: ['chessbase-square'],
+  },
+  {
+    id: 'stalemate-promotion',
+    title: 'Check for stalemate before promoting',
+    category: 'Endgames',
+    body: 'After a nonchecking move, verify the opponent has a legal move. Promotion can be to a queen, rook, bishop, or knight; choose the piece the position requires.',
+    cue: 'Is it mate, stalemate, or still play?',
+    sourceIds: ['fide-laws'],
+  },
+  {
+    id: 'attempt-first',
+    title: 'Commit to a line before revealing',
+    category: 'Training',
+    body: 'Choose a move and predict the reply before opening the solution. This app uses active recall to make your reasoning available for feedback.',
+    cue: 'What is my line and why?',
+    sourceIds: ['yusupov-fundamentals', 'retrieval-study'],
+  },
+  {
+    id: 'retest-errors',
+    title: 'Retest the idea after a delay',
+    category: 'Training',
+    body: 'After reviewing a miss, explain the missed cue and try the position again later without the answer. The app\'s review timing is a heuristic, not a proven chess prescription.',
+    cue: 'Can I find it without the hint?',
+    sourceIds: ['retrieval-study'],
+  },
+];
+
+// Each line is a legal, illustrative branch from the normal starting position.
+// Matching a rehearsal is not the same as finding the uniquely best chess move.
+// Notes describe the whole branch and its limitations, not individual plies.
+export const openingDrills: OpeningDrill[] = [
+  {
+    id: 'italian-quiet',
+    name: 'Italian: prepare the center',
+    side: 'w',
+    moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'c3', 'Nf6', 'd3', 'd6'],
+    notes: [
+      'The bishop on c4 develops toward the center and f7. The c3–d3 setup keeps a later d4 advance available after preparation.',
+      'Next, consider castling and developing the queenside. Calculate central exchanges before changing the pawn structure.',
+      'This quiet branch is one option. An early ...Nf6, ...d5, or attack on the bishop calls for fresh calculation rather than the same script.',
+    ],
+    sourceIds: ['opening-italian'],
+  },
+  {
+    id: 'scotch-center',
+    name: 'Scotch: open the center',
+    side: 'w',
+    moves: ['e4', 'e5', 'Nf3', 'Nc6', 'd4', 'exd4', 'Nxd4', 'Bc5'],
+    notes: [
+      'The early d4 challenges Black\'s central pawn. Recapturing with the knight gains central activity while moving that piece a second time for a concrete reason.',
+      'Black\'s ...Bc5 adds pressure to d4. Decide how to meet it before making a routine developing move; Be3 and Nxc6 lead to different positions.',
+      'Black can choose ...Nf6 instead. This branch is a starting position for plans, not a complete answer to every defense.',
+    ],
+    sourceIds: ['opening-scotch'],
+  },
+  {
+    id: 'queens-gambit-accepted',
+    name: 'Queen\'s Gambit: recover with development',
+    side: 'w',
+    moves: ['d4', 'd5', 'c4', 'dxc4', 'Nf3', 'Nf6', 'e3', 'e6', 'Bxc4', 'c5'],
+    notes: [
+      'The c-pawn challenges d5. In this accepted branch, e3 opens the bishop\'s path to recover the pawn on c4 while developing.',
+      'Black\'s ...c5 challenges d4. Finish development and examine the pawn structure that would remain after central exchanges.',
+      'If Black declines with ...e6 or ...c6, the pawn structure and plans change. Recovery of c4 is not a license to ignore concrete threats.',
+    ],
+    sourceIds: ['opening-qga'],
+  },
+  {
+    id: 'london-development',
+    name: 'London: bishop before the pawn chain',
+    side: 'w',
+    moves: ['d4', 'd5', 'Bf4', 'Nf6', 'e3', 'c5', 'c3', 'Nc6', 'Nd2', 'e6'],
+    notes: [
+      'Bf4 develops the bishop outside the e3–d4 pawn chain. The c3 pawn supports d4; the b1 knight uses d2 in this setup.',
+      'Continue development with attention to the center. A later e4 break is a plan to prepare, not a move to play automatically.',
+      'Watch for pressure on b2 and d4, especially ...Qb6. Black\'s early ...c5 and ...g6 setups can require different choices.',
+    ],
+    sourceIds: ['opening-london'],
+  },
+  {
+    id: 'caro-advance',
+    name: 'Caro-Kann: free the bishop',
+    side: 'b',
+    moves: ['e4', 'c6', 'd4', 'd5', 'e5', 'Bf5', 'Nf3', 'e6'],
+    notes: [
+      'The c6 pawn supports ...d5. After White advances e5, ...Bf5 develops the light-squared bishop before ...e6 closes its original diagonal.',
+      'Complete development and prepare a challenge to White\'s center. The bishop outside the chain can itself become a target.',
+      'White\'s h4, g4, exchange, and Nc3 lines require different responses. The familiar structure is a guide, not a universal move order.',
+    ],
+    sourceIds: ['opening-caro'],
+  },
+  {
+    id: 'french-advance',
+    name: 'French: attack the pawn chain',
+    side: 'b',
+    moves: ['e4', 'e6', 'd4', 'd5', 'e5', 'c5', 'c3', 'Nc6', 'Nf3', 'Qb6'],
+    notes: [
+      'White gains space with e5. In this illustrative continuation, ...c5 and ...Nc6 attack d4; ...Qb6 lines up with d4 behind Black\'s c5 pawn.',
+      'Find useful squares for the kingside pieces and a plan for the restricted c8 bishop. Another pawn break may become possible after preparation.',
+      'Pressure does not mean every pawn capture is safe. Check tactical replies before ...cxd4 or ...Qxb2; 3.Nc3 and 3.Nd2 are separate branches.',
+    ],
+    sourceIds: ['opening-french'],
+  },
+  {
+    id: 'qgd-development',
+    name: 'Queen\'s Gambit Declined: develop and castle first',
+    side: 'b',
+    moves: ['d4', 'd5', 'c4', 'e6', 'Nc3', 'Nf6', 'Bg5', 'Be7', 'e3', 'O-O'],
+    notes: [
+      'The e6 pawn supports d5. Black develops the kingside and castles while White develops pressure on the center.',
+      'Plan how to challenge d4, often with a prepared ...c5, and how to improve the c8 bishop. The compact structure still needs active pieces.',
+      'The Exchange Variation and early Bf4 setups need their own plans. Do not force these ten plies against a different White move order.',
+    ],
+    sourceIds: ['opening-queens-gambit'],
+  },
+  {
+    id: 'slav-main',
+    name: 'Slav: develop outside the chain',
+    side: 'b',
+    moves: ['d4', 'd5', 'c4', 'c6', 'Nf3', 'Nf6', 'Nc3', 'dxc4', 'a4', 'Bf5'],
+    notes: [
+      'The c6 pawn supports d5 while leaving the c8 bishop a route out. In this branch, Black captures on c4 before developing that bishop.',
+      'White\'s a4 restrains ...b5. Develop with ...e6 and prepare king safety; do not assume the extra c4 pawn can be kept.',
+      'Early ...Bf5 in a different move order can expose queenside weaknesses. White can also choose e3 or an exchange setup instead of this line.',
+    ],
+    sourceIds: ['opening-slav'],
+  },
+];
+
+export const sources: CurriculumSource[] = [
+  {
+    id: 'heisman-thought',
+    title: 'Thought Process Principles',
+    author: 'Dan Heisman',
+    url: 'https://www.danheisman.com/thought-process-principles.html',
+    note: 'Author guidance on move safety, candidate comparison, and the opponent\'s best reply; expert instruction, not an app trial.',
+  },
+  {
+    id: 'heisman-safety',
+    title: 'Is Your Move Safe? — distributor-hosted excerpt',
+    author: 'Dan Heisman; Mongoose Press',
+    url: 'https://www.newinchess.com/media/wysiwyg/product_pdf/7631.pdf',
+    note: 'New in Chess hosts this excerpt: printed pp. 16–20 and 37–39 cover safety, warning signs, and completing forcing lines.',
+  },
+  {
+    id: 'heisman-openings',
+    title: 'Opening Principles',
+    author: 'Dan Heisman',
+    url: 'https://www.danheisman.com/opening-principles.html',
+    note: 'Expert development and king-safety guidelines. Concrete tactics can override a guideline.',
+  },
+  {
+    id: 'heisman-middlegame',
+    title: 'Middlegame Principles',
+    author: 'Dan Heisman',
+    url: 'https://www.danheisman.com/middlegame-principles.html',
+    note: 'Expert guidance on defenders, coordinated attacks, and preserving an advantage; phrased conditionally here.',
+  },
+  {
+    id: 'heisman-endgames',
+    title: 'Endgame Principles',
+    author: 'Dan Heisman',
+    url: 'https://www.danheisman.com/endgame-principles.html',
+    note: 'Practical guidelines for exchanges, king and rook activity, and supported passed pawns.',
+  },
+  {
+    id: 'steps-two',
+    title: 'Chess Steps — Manual Step 2',
+    author: 'Chess Steps',
+    url: 'https://www.chess-steps.eu/manual-step-2',
+    note: 'Official curriculum includes tactics, defense, openings, and pawn endings. Its rating description is not a Chess.com conversion.',
+  },
+  {
+    id: 'yusupov-fundamentals',
+    title: 'Build Up Your Chess 1',
+    author: 'Artur Yusupov; Quality Chess (distributed by Simon & Schuster)',
+    url: 'https://www.simonandschuster.biz/books/Build-Up-Your-Chess-1/Artur-Yusupov/9781906552671',
+    note: 'Official publisher overview supports broad coverage and instruction followed by exercises; the full book was not reproduced.',
+  },
+  {
+    id: 'silman-endgames',
+    title: 'Silman\'s Complete Endgame Course',
+    author: 'Jeremy Silman; Siles Press (Silman-James Press)',
+    url: 'https://www.silmanjamespress.com/shop/chess/silmans-complete-endgame-course/',
+    note: 'Publisher overview supports staged endgame study, starting with basic mates and pawn endings; no online rating equivalence is inferred.',
+  },
+  {
+    id: 'smerdon-swindler',
+    title: 'The Complete Chess Swindler — publisher excerpt',
+    author: 'David Smerdon',
+    url: 'https://www.newinchess.com/media/wysiwyg/product_pdf/9101.pdf',
+    note: '2020 excerpt motivates resistance in worse positions and drawing resources; it does not validate an Elo-gain estimate.',
+  },
+  {
+    id: 'fide-laws',
+    title: 'FIDE Laws of Chess, effective 1 January 2023',
+    author: 'FIDE',
+    url: 'https://handbook.fide.com/chapter/e012023',
+    note: 'Articles 3.7.3.3–3.7.3.5, 3.9.2, 5.2.1, and 9.2: promotion, king safety, stalemate, and repetition. Online claim interfaces differ.',
+  },
+  {
+    id: 'chesscom-fork',
+    title: 'Fork',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/terms/fork-chess',
+    note: 'Official explanation of simultaneous attacks and forcing forks. No source puzzles are copied.',
+  },
+  {
+    id: 'chesscom-pin',
+    title: 'Pin',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/terms/pin-chess',
+    note: 'Absolute and relative pins, plus ways to unpin. Legal movement is governed by king safety, including moves along the pin line.',
+  },
+  {
+    id: 'chesscom-discovery',
+    title: 'Discovered Attack',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/terms/discovered-attack-chess',
+    note: 'Official explanation of uncovering a line and combining threats.',
+  },
+  {
+    id: 'chesscom-zwischenzug',
+    title: 'Zwischenzug',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/terms/zwischenzug-chess',
+    note: 'Official explanation of intermediate moves within exchanges and combinations.',
+  },
+  {
+    id: 'chesscom-opposition',
+    title: 'Opposition',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/terms/opposition-chess',
+    note: 'Direct opposition and access to key squares; a tool for calculation, not a universal winning rule.',
+  },
+  {
+    id: 'chessbase-square',
+    title: 'The Rule of the Square',
+    author: 'ChessBase',
+    url: 'https://learn.chessbase.com/en/page/the-rule-of-the-square',
+    note: 'Official pawn-race tutorial. The curriculum adds explicit checks for move order and interference.',
+  },
+  {
+    id: 'opening-italian',
+    title: 'Italian Game',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/openings/Italian-Game',
+    note: 'The page gives the first nine plies and Giuoco Pianissimo structure; the final ...d6 is an authored illustrative continuation.',
+  },
+  {
+    id: 'opening-scotch',
+    title: 'Scotch Game',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/openings/Scotch-Game',
+    note: 'Early central exchange and Classical Variation with ...Bc5. Database win rates are not used as efficacy evidence.',
+  },
+  {
+    id: 'opening-qga',
+    title: 'Queen\'s Gambit Accepted',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/openings/Queens-Gambit-Accepted',
+    note: 'The page gives 1.d4 d5 2.c4 dxc4, pawn recovery, and counterattack on d4; the final six plies are an authored example.',
+  },
+  {
+    id: 'opening-london',
+    title: 'London System',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/openings/London-System',
+    note: 'Bishop development before e3, typical structure, and early ...c5 / ...Qb6 challenges.',
+  },
+  {
+    id: 'opening-caro',
+    title: 'Caro-Kann Defense',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/openings/Caro-Kann-Defense',
+    note: 'The page gives the first seven plies; the final ...e6 is an authored continuation. Other White third moves create different branches.',
+  },
+  {
+    id: 'opening-french',
+    title: 'French Defense',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/openings/French-Defense',
+    note: 'The page gives the structure through 3.e5 and the restricted c8 bishop; the last five plies and their positional explanation are an authored example.',
+  },
+  {
+    id: 'opening-queens-gambit',
+    title: 'Queen\'s Gambit',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/openings/Queens-Gambit',
+    note: 'The page gives the first four plies, the bishop-development tradeoff, and ...c5 plans; the final six plies are an authored example.',
+  },
+  {
+    id: 'opening-slav',
+    title: 'Slav Defense',
+    author: 'Chess.com',
+    url: 'https://www.chess.com/openings/Slav-Defense',
+    note: 'Official main line through ...Bf5, central support, and the development tradeoff of ...c6.',
+  },
+  {
+    id: 'charness-practice',
+    title: 'The Role of Deliberate Practice in Chess Expertise (2005)',
+    author: 'Neil Charness, Michael Tuffiash, Ralf Krampe, Eyal Reingold, Ekaterina Vasyukova',
+    url: 'https://onlinelibrary.wiley.com/doi/10.1002/acp.1106',
+    note: 'Observational, retrospective study of tournament-rated players: study and skill were associated. It does not establish this app\'s causal effect.',
+  },
+  {
+    id: 'retrieval-study',
+    title: 'Test-Enhanced Learning (2006)',
+    author: 'Henry L. Roediger III and Jeffrey D. Karpicke',
+    url: 'https://www.psychologicalscience.org/journals/psychological-science/j.1467-9280.2006.01693.x/',
+    note: 'Experiments on prose recall support delayed retrieval practice. Transfer to chess and this app\'s exact intervals remain unvalidated.',
+  },
+];

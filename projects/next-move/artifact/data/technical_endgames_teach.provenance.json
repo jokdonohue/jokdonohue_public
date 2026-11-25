@@ -1,0 +1,17 @@
+{
+  "source": "reviews/claude/tools/m3/endgame_teach/ (build_raw.mjs, assemble.mjs; ideas, hand-chosen tries and notes in authored_ideas.mjs and authored_notes.mjs)",
+  "output_sha256": "92eb910589bd8eeefec2f98280ba8712adad73e988b61dd508f40e259e47dff8",
+  "author": "Claude, M3 builder A2, 2026-11-12",
+  "tablebase": "Lichess Syzygy tablebase (tablebase.lichess.ovh), cached in reviews/claude/data/verification/tbcache.json",
+  "results": "every legal move at every solver step, from the solver's view: win, draw or loss (no cursed wins or blessed losses occur)",
+  "tries": "up to four per step: moves that change the result, most natural first (hand-chosen, named in the drill explanation for that step, near misses next to the answer square, checks, captures, pawn moves, king moves towards the action), plus in mate drills checks that only delay the mate",
+  "lines": "up to 10 plies after the try: the winning side mates fastest and the losing side resists longest (DTM); in a drawn position the side trying to win pushes a pawn safely in a pawn ending, otherwise plays the drawing move that leaves the fewest holding replies, and the defender prefers captures, pawn moves, checks, then king moves towards the square in front of the pawn; a drawn line stops once no pawns are left and material is level",
+  "notes": "written by the builder from each line; assemble.mjs and tests/m3_endgame_teach.test.ts check every move and claim a note makes",
+  "counts": {
+    "drills": 26,
+    "steps": 55,
+    "tries": 177
+  },
+  "revised": "2026-11-24 (version 7.3), tech-kpkp-give-up-pawn-keep-opposition: its idea now names the key squares of the c4 pawn (b6, c6, d6, also listed as keySquares), and the eight try notes after the capture name the key square each try gives up. Five notes in three other drills (tech-kpkp-triangulation, tech-reti-double-threat, tech-kpkp-go-around) lost the words that said a wrong move was right at a later step. Every result, try and line is unchanged; the notes passed the same checks.",
+  "generated": "2026-11-24"
+}
