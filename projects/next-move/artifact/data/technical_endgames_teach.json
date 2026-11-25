@@ -142,12 +142,12 @@
    {"step": 0, "fen": "7K/8/k1P5/7p/8/8/8/8 w - - 0 1", "win": [], "draw": ["h8g7"], "loss": ["c6c7","h8g8","h8h7"], "tries": [
     {"uci":"h8h7","san":"Kh7","result":"loss","lineUci":["a6b6","h7g6","h5h4","g6f5","h4h3","f5e4","h3h2","e4d3","b6c6","d3d2"],"note":"After Kh7, your king is too slow for both pawns: the h-pawn runs to h2, Black takes c6 with Kxc6, and Black wins."},
     {"uci":"h8g8","san":"Kg8","result":"loss","lineUci":["a6b6","g8f7","b6c6","f7e6","h5h4","e6e5","h4h3","e5d4","h3h2","d4d3"],"note":"After Kg8, your king is too slow for both pawns: Black takes c6 with Kxc6, the h-pawn runs to h2, and Black wins."},
-    {"uci":"c6c7","san":"c7","result":"loss","lineUci":["a6b7","c7c8q","b7c8","h8g7","h5h4","g7f6","h4h3","f6e5","h3h2","e5d4"],"note":"c7 comes too early: Black's king takes the new queen on c8, and the h-pawn runs while your king is far away: Black wins."}
+    {"uci":"c6c7","san":"c7","result":"loss","lineUci":["a6b7","c7c8q","b7c8","h8g7","h5h4","g7f6","h4h3","f6e5","h3h2","e5d4"],"note":"After c7, Black's king takes the new queen on c8, and the h-pawn runs while your king is far away: Black wins."}
    ]},
    {"step": 2, "fen": "8/6K1/k1P5/8/7p/8/8/8 w - - 0 2", "win": [], "draw": ["g7f6"], "loss": ["c6c7","g7f7","g7f8","g7g6","g7g8","g7h6","g7h7","g7h8"], "tries": [
     {"uci":"g7f7","san":"Kf7","result":"loss","lineUci":["a6b6","f7e6","b6c6","e6e5","h4h3","e5d4","h3h2","d4d3","h2h1q","d3e2"],"note":"Kf7 is too slow for both pawns: Black takes c6 with Kxc6, and the h-pawn promotes: Black wins."},
     {"uci":"g7g6","san":"Kg6","result":"loss","lineUci":["a6b6","g6f5","h4h3","f5e4","h3h2","e4d3","b6c6","d3d2","h2h1q","d2e2"],"note":"Kg6 only chases the h-pawn: it still promotes, and Black also takes c6 with Kxc6, so Black wins."},
-    {"uci":"c6c7","san":"c7","result":"loss","lineUci":["a6b7","c7c8q","b7c8","g7f6","h4h3","f6e5","h3h2","e5d4","h2h1q","d4c3"],"note":"c7 comes too early: Black's king takes the new queen on c8, and the h-pawn promotes: Black wins."},
+    {"uci":"c6c7","san":"c7","result":"loss","lineUci":["a6b7","c7c8q","b7c8","g7f6","h4h3","f6e5","h3h2","e5d4","h2h1q","d4c3"],"note":"After c7, Black's king takes the new queen on c8, and the h-pawn promotes: Black wins."},
     {"uci":"g7f8","san":"Kf8","result":"loss","lineUci":["a6b6","f8e7","b6c6","e7e6","h4h3","e6e5","h3h2","e5d4","h2h1q","d4e3"],"note":"Kf8 is too slow for both pawns: Black takes c6 with Kxc6, and the h-pawn promotes: Black wins."}
    ]},
    {"step": 4, "fen": "8/8/1kP2K2/8/7p/8/8/8 w - - 2 3", "win": [], "draw": ["f6e5"], "loss": ["c6c7","f6e6","f6e7","f6f5","f6f7","f6g5","f6g6","f6g7"], "tries": [
@@ -169,7 +169,7 @@
     {"uci":"d6d7","san":"Kd7","result":"loss","lineUci":["h2h1q","d7d6","h1c6","d6e5","c6f3","e5d4","f3e2","d4d5","e2e3","d5c4"],"note":"Kd7 gives Black time: the h-pawn promotes, and the new queen takes c6 with check, so Black wins."}
    ]}
   ]},
-  {"id": "tech-kpkp-give-up-pawn-keep-opposition", "idea": "Your c5 pawn cannot be saved, so think about the position after it falls. Wait with your king now, so that when White's king takes the pawn you can step in front of it and take the opposition.", "steps": [
+  {"id": "tech-kpkp-give-up-pawn-keep-opposition", "idea": "Your c5 pawn cannot be saved. With its pawn on c4, White then wins only if its king reaches b6, c6 or d6, the key squares. So wait now, and once the pawn falls stand in front of White's king, one square apart: your king then guards every key square it could step to.", "keySquares": ["b6","c6","d6"], "steps": [
    {"step": 0, "fen": "8/8/1k6/2pK4/2P5/8/8/8 b - - 0 1", "win": [], "draw": ["b6b7"], "loss": ["b6a5","b6a6","b6a7","b6c7"], "tries": [
     {"uci":"b6a6","san":"Ka6","result":"loss","lineUci":["d5c5","a6b7","c5d6","b7b8","d6d7","b8a7","c4c5","a7a6","c5c6","a6b5"],"note":"After Ka6 Kxc5, White's king walks to d6 and d7, ahead of its pawn, and White wins."},
     {"uci":"b6a7","san":"Ka7","result":"loss","lineUci":["d5c5","a7b7","c5d6","b7b8","d6d7","b8a7","c4c5","a7a6","c5c6","a6b5"],"note":"After Ka7 Kxc5, White's king walks to d6 and d7, ahead of its pawn, and White wins."},
@@ -177,16 +177,16 @@
     {"uci":"b6a5","san":"Ka5","result":"loss","lineUci":["d5c5","a5a6","c5c6","a6a5","c4c5","a5a4","c6b6","a4a3","c5c6","a3b2"],"note":"After Ka5 Kxc5, White's king steps to c6, in front of its pawn, and the pawn runs: White wins."}
    ]},
    {"step": 2, "fen": "8/1k6/8/2K5/2P5/8/8/8 b - - 0 2", "win": [], "draw": ["b7c7"], "loss": ["b7a6","b7a7","b7a8","b7b8","b7c8"], "tries": [
-    {"uci":"b7b8","san":"Kb8","result":"loss","lineUci":["c5b6","b8c8","c4c5","c8d7","c5c6","d7d8","b6b7","d8e7","c6c7","e7f6"],"note":"Kb8 lets White's king take the opposition with Kb6, and the pawn runs to c7: White wins."},
-    {"uci":"b7c8","san":"Kc8","result":"loss","lineUci":["c5c6","c8b8","c4c5","b8a7","c6d6","a7a6","c5c6","a6b5","c6c7","b5c4"],"note":"Kc8 lets White's king step to c6, in front of its pawn, and the pawn runs to c7: White wins."},
-    {"uci":"b7a6","san":"Ka6","result":"loss","lineUci":["c5c6","a6a5","c4c5","a5a4","c6b6","a4a3","c5c6","a3b2","c6c7","b2c1"],"note":"Ka6 lets White's king step to c6, in front of its pawn, and the pawn runs to c7: White wins."},
-    {"uci":"b7a7","san":"Ka7","result":"loss","lineUci":["c5c6","a7a6","c4c5","a6a5","c6d6","a5a4","c5c6","a4b3","c6c7","b3c2"],"note":"Ka7 lets White's king step to c6, in front of its pawn, and the pawn runs to c7: White wins."}
+    {"uci":"b7b8","san":"Kb8","result":"loss","lineUci":["c5b6","b8c8","c4c5","c8d7","c5c6","d7d8","b6b7","d8e7","c6c7","e7f6"],"note":"Kb8 leaves the key square b6 unguarded: White's king takes the opposition with Kb6, and the pawn cannot be stopped, so White wins."},
+    {"uci":"b7c8","san":"Kc8","result":"loss","lineUci":["c5c6","c8b8","c4c5","b8a7","c6d6","a7a6","c5c6","a6b5","c6c7","b5c4"],"note":"Kc8 leaves the key square c6 unguarded: White's king steps onto it with Kc6, in front of its pawn, and the pawn cannot be stopped, so White wins."},
+    {"uci":"b7a6","san":"Ka6","result":"loss","lineUci":["c5c6","a6a5","c4c5","a5a4","c6b6","a4a3","c5c6","a3b2","c6c7","b2c1"],"note":"Ka6 leaves the key square c6 unguarded: White's king steps onto it with Kc6, in front of its pawn, and the pawn cannot be stopped, so White wins."},
+    {"uci":"b7a7","san":"Ka7","result":"loss","lineUci":["c5c6","a7a6","c4c5","a6a5","c6d6","a5a4","c5c6","a4b3","c6c7","b3c2"],"note":"Ka7 leaves the key square c6 unguarded: White's king steps onto it with Kc6, in front of its pawn, and the pawn cannot be stopped, so White wins."}
    ]},
    {"step": 4, "fen": "8/2k5/8/1K6/2P5/8/8/8 b - - 2 3", "win": [], "draw": ["c7b7"], "loss": ["c7b8","c7c8","c7d6","c7d7","c7d8"], "tries": [
-    {"uci":"c7b8","san":"Kb8","result":"loss","lineUci":["b5b6","b8c8","c4c5","c8d7","c5c6","d7d8","b6b7","d8e7","c6c7","e7f6"],"note":"Kb8 lets White's king take the opposition with Kb6, and the pawn runs to c7: White wins."},
-    {"uci":"c7c8","san":"Kc8","result":"loss","lineUci":["b5c6","c8b8","c4c5","b8a7","c6d6","a7a6","c5c6","a6b5","c6c7","b5c4"],"note":"Kc8 lets White's king step to c6, in front of its pawn, and the pawn runs to c7: White wins."},
-    {"uci":"c7d6","san":"Kd6","result":"loss","lineUci":["b5b6","d6d7","c4c5","d7c8","b6c6","c8d8","c6b7","d8d7","c5c6","d7d6"],"note":"Kd6 lets White's king reach b6, and king and pawn walk up together: White wins."},
-    {"uci":"c7d7","san":"Kd7","result":"loss","lineUci":["b5b6","d7d6","c4c5","d6d7","c5c6","d7d8","b6b7","d8e7","c6c7","e7f6"],"note":"Kd7 lets White's king reach b6, and the pawn runs to c7, giving check on the way: White wins."}
+    {"uci":"c7b8","san":"Kb8","result":"loss","lineUci":["b5b6","b8c8","c4c5","c8d7","c5c6","d7d8","b6b7","d8e7","c6c7","e7f6"],"note":"Kb8 leaves the key square b6 unguarded: White's king takes the opposition with Kb6, and the pawn runs to c7, so White wins."},
+    {"uci":"c7c8","san":"Kc8","result":"loss","lineUci":["b5c6","c8b8","c4c5","b8a7","c6d6","a7a6","c5c6","a6b5","c6c7","b5c4"],"note":"Kc8 leaves the key square c6 unguarded: White's king steps onto it with Kc6, in front of its pawn, and the pawn runs to c7, so White wins."},
+    {"uci":"c7d6","san":"Kd6","result":"loss","lineUci":["b5b6","d6d7","c4c5","d7c8","b6c6","c8d8","c6b7","d8d7","c5c6","d7d6"],"note":"Kd6 leaves the key square b6 unguarded: White's king steps onto it with Kb6, and king and pawn walk up together, so White wins."},
+    {"uci":"c7d7","san":"Kd7","result":"loss","lineUci":["b5b6","d7d6","c4c5","d6d7","c5c6","d7d8","b6b7","d8e7","c6c7","e7f6"],"note":"Kd7 leaves the key square b6 unguarded: White's king steps onto it with Kb6, and the pawn runs to c7, giving check on the way, so White wins."}
    ]}
   ]},
   {"id": "tech-kpkp-go-around", "idea": "Black's king cannot guard the d6 pawn and keep your king out at the same time. Walk your king round the side, away from Black's king, to attack the pawn from c7. Once the pawn falls, your d-pawn is free to run.", "keySquares": ["c7"], "steps": [
@@ -197,13 +197,13 @@
     {"uci":"c4d3","san":"Kd3","result":"draw","lineUci":["e7d7","d3c4","d7c7","c4b5","c7b7","b5a5","b7a7","a5b5","a7b7","b5a5"],"note":"Kd3 gives Black's king time to come back to d7 and c7, and with Kb7 it takes the opposition and holds the draw."}
    ]},
    {"step": 2, "fen": "8/8/3p1k2/1K1P4/8/8/8/8 w - - 2 2", "win": ["b5b6"], "draw": ["b5b4","b5c4"], "loss": ["b5a4","b5a5","b5a6","b5c6"], "tries": [
-    {"uci":"b5c6","san":"Kc6","result":"loss","lineUci":["f6e5","c6b5","e5d5","b5a4","d5c4","a4a3","d6d5","a3b2","c4d3","b2b1"],"note":"Kc6 comes too early: Black's king steps to e5 and wins the d5 pawn with Kxd5, and Black wins."},
+    {"uci":"b5c6","san":"Kc6","result":"loss","lineUci":["f6e5","c6b5","e5d5","b5a4","d5c4","a4a3","d6d5","a3b2","c4d3","b2b1"],"note":"After Kc6, Black's king steps to e5 and wins the d5 pawn with Kxd5, and Black wins."},
     {"uci":"b5a5","san":"Ka5","result":"loss","lineUci":["f6e5","a5b4","e5d5","b4c3","d5e4","c3d2","e4d4","d2c2","d4e3","c2d1"],"note":"Ka5 steps away from the pawn: Black's king takes d5 with Kxd5 and walks in front of its own pawn, so Black wins."},
     {"uci":"b5a6","san":"Ka6","result":"loss","lineUci":["f6e5","a6a5","e5d5","a5a4","d5c4","a4a3","d6d5","a3b2","c4d3","b2b1"],"note":"Ka6 is a step too slow on the way to c7: Black's king comes to e5 and wins the d5 pawn with Kxd5, and Black wins."},
     {"uci":"b5c4","san":"Kc4","result":"draw","lineUci":["f6e5","c4c3","e5d5","c3d3","d5c5","d3c3","d6d5","c3d3","d5d4","d3c2"],"note":"Kc4 goes back: Black's king reaches e5 and wins the d5 pawn with Kxd5, so it is a draw."}
    ]},
    {"step": 4, "fen": "8/8/1K1p4/3P1k2/8/8/8/8 w - - 4 3", "win": ["b6c7"], "draw": ["b6b5"], "loss": ["b6a5","b6a6","b6a7","b6b7","b6c6"], "tries": [
-    {"uci":"b6c6","san":"Kc6","result":"loss","lineUci":["f5e5","c6b5","e5d5","b5a4","d5c4","a4a3","d6d5","a3b2","c4d3","b2b1"],"note":"Kc6 comes too early: Black's king steps to e5 and wins the d5 pawn with Kxd5, and Black wins."},
+    {"uci":"b6c6","san":"Kc6","result":"loss","lineUci":["f5e5","c6b5","e5d5","b5a4","d5c4","a4a3","d6d5","a3b2","c4d3","b2b1"],"note":"After Kc6, Black's king steps to e5 and wins the d5 pawn with Kxd5, and Black wins."},
     {"uci":"b6b7","san":"Kb7","result":"loss","lineUci":["f5e4","b7c6","e4e5","c6b5","e5d5","b5a4","d5c4","a4a3","d6d5","a3b2"],"note":"Kb7 is too slow: Black's king comes to e5 and wins the d5 pawn with Kxd5, and Black wins."},
     {"uci":"b6b5","san":"Kb5","result":"draw","lineUci":["f5e4","b5c4","e4e5","c4c3","e5d5","c3d3","d5c5","d3c3","d6d5","c3d3"],"note":"Kb5 goes back, and Black's king has time to win the d5 pawn with Kxd5: a draw."},
     {"uci":"b6a5","san":"Ka5","result":"loss","lineUci":["f5e4","a5b4","e4d5","b4c3","d5e4","c3d2","e4d4","d2c2","d4e3","c2d1"],"note":"Ka5 goes back: Black's king takes d5 with Kxd5 and walks in front of its own pawn, so Black wins."}
@@ -223,7 +223,7 @@
     {"uci":"c3b2","san":"Kb2","result":"draw","lineUci":["d7c7","b2b3","c7b6","b3b4","b6a6","b4a4","a6b6","a4b4","b6a6","b4a4"],"note":"After Kb2, Black's king gets to b6 in time and keeps your king out of b5 and c5: a draw."}
    ]},
    {"step": 2, "fen": "8/2k5/3p4/3P4/1K6/8/8/8 w - - 2 2", "win": ["b4a5"], "draw": ["b4a3","b4a4","b4b3","b4b5","b4c3","b4c4"], "loss": [], "tries": [
-    {"uci":"b4b5","san":"Kb5","result":"draw","lineUci":["c7b7","b5a5","b7a7","a5b5","a7b7","b5a5","b7a7","a5b5","a7b7"],"note":"Kb5 comes one move too soon: Black answers Kb7 and has the opposition, so you are the one who must give way: a draw."},
+    {"uci":"b4b5","san":"Kb5","result":"draw","lineUci":["c7b7","b5a5","b7a7","a5b5","a7b7","b5a5","b7a7","a5b5","a7b7"],"note":"After Kb5, Black answers Kb7 and has the opposition, so you are the one who must give way: a draw."},
     {"uci":"b4a4","san":"Ka4","result":"draw","lineUci":["c7b6","a4b4","b6a6","b4a4","a6b6","a4b4","b6a6","b4a4","a6b6"],"note":"Ka4 lets Black's king reach b6, and it keeps your king out of b5 and c5: a draw."},
     {"uci":"b4c4","san":"Kc4","result":"draw","lineUci":["c7b6","c4b4","b6a6","b4a4","a6b6","a4b4","b6a6","b4a4","a6b6","a4b4"],"note":"Kc4 lets Black's king reach b6, and it keeps your king out of b5 and c5: a draw."},
     {"uci":"b4a3","san":"Ka3","result":"draw","lineUci":["c7b6","a3b4","b6a6","b4a4","a6b6","a4b4","b6a6","b4a4","a6b6","a4b4"],"note":"Ka3 lets Black's king reach b6, and it keeps your king out of b5 and c5: a draw."}

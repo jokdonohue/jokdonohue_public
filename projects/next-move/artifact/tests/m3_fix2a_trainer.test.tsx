@@ -259,7 +259,8 @@ test('(r) 3: the try viewer\'s figure is the try\'s Win% for the solver when the
   assert.deepEqual(tryViewerOptions(view, true), { verdict: { side: 'b', win: 13.7 }, omit: [{ from: 'd8', to: 'd1', piece: 'r', san: 'Rd1+' }], noChangeSentence: false });
   assert.deepEqual(tryViewerOptions(view, false), { verdict: { side: 'b', win: 13.7 }, omit: null, noChangeSentence: false }, 'complete: nothing left out');
   // FX2c (9.11.3 R6-3): the viewer also opens on the try (`initialStep={1}` before the narrator options).
-  assert.match(body('TrySlot'), /const \{ verdict, omit \} = tryViewerOptions\(view, solving\);\s*return <div className="try-check"><LineViewer key=\{view\.key\} [^\n]*\n\s*initialStep=\{1\} verdict=\{verdict\} omit=\{omit\} noChangeSentence=\{false\} \{\.\.\.closed\}\/><\/div>;/);
+  // Version 7.3: a drill's note is rendered above the viewer (`note`); the viewer's own props are as before.
+  assert.match(body('TrySlot'), /const \{ verdict, omit \} = tryViewerOptions\(view, solving\);\n(?:\s*\/\/[^\n]*\n)*\s*const note = view\.source === 'tablebase' && view\.intro \? view\.intro : '';\s*return <div className="try-check">\{note && <p className="try-note small">\{note\}<\/p>\}<LineViewer key=\{view\.key\} [^\n]*\n\s*initialStep=\{1\} verdict=\{verdict\} omit=\{omit\} noChangeSentence=\{false\} \{\.\.\.closed\}\/><\/div>;/);
   // R3-3's shape, invented: the try wins a rook, the engine gives the solver 6%. The closing sentence says both.
   const rook: TryView = { key: 'k', status: 'done', trySan: 'Bxh8', fenBefore: BISHOP, line: ['b2h8', 'h1g2'], title: "Why Bxh8 doesn't work", answers: answerMovesFrom({ moves: ['a1b1'] }, BISHOP, 0), verdict: { side: 'w', win: 6 }, source: 'engine' };
   assert.equal(told(rook, rook.line, true).summary, 'White is a rook up at the end of this line, but the engine gives Black 94% to win.');

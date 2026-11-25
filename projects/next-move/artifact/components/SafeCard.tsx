@@ -4,11 +4,12 @@
  * `SafeAnswerPanel` is rendered only after he answers. Copy follows the safety check "what does that allow?"
  * (evidence C1) and practises telling sound moves from blunders apart (evidence A3).
  */
-import { useState } from 'react';
-import { Chess } from 'chess.js';
+import { useMemo } from 'react';
 import { ArrowRight, GraduationCap, ShieldCheck } from 'lucide-react';
 import Chessboard from './Chessboard';
+import LineViewer from './LineViewer';
 import { describeMove, type SafeChoice, type SafeQuestion, type SafeScore } from './safe';
+import { safeReveal } from './safeReveal';
 import type { SafeCardDoc } from '@/src/contract/docs';
 
 const sideName = (c: 'w' | 'b') => (c === 'w' ? 'White' : 'Black');
@@ -36,40 +37,49 @@ export function SafeQuestionPanel({ question, onAnswer, children }: { question: 
   </div>;
 }
 
-/** The position after his move, or null. */
-function fenAfterMove(fen: string, uci: string): string | null {
-  try { const b = new Chess(fen); b.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] }); return b.fen(); } catch { return null; }
-}
-
-export function SafeAnswerPanel({ question, card, choice, saved = true, score, onNext, nextLabel, children }: {
+/**
+ * After his answer (version 7.3). The panel says what the stored facts show (`safeReveal`): the result, a lead in plain
+ * words, the engine's choice and the stored pair of figures; then Next; then the line viewers, as after any other card
+ * (`SolvedViewers`). The reply line is stepped through in words from his move on; before 7.3 it was one sentence of
+ * percentages and an arrow behind a "Show the reply" toggle.
+ */
+export function SafeAnswerPanel({ question, card, choice, saved = true, score, onNext, nextLabel, layout = 'wide', children }: {
   question: SafeQuestion; card: SafeCardDoc; choice: SafeChoice; /** False when the answer could not be recorded (fix pass P2-4). */ saved?: boolean;
-  score: SafeScore | null; onNext: () => void; nextLabel: string; children?: React.ReactNode;
+  score: SafeScore | null; onNext: () => void; nextLabel: string;
+  /** Where the line viewers go: under the board from 651 to 1000 px, where the panel is narrowest (as `PracticeColumns`). */
+  layout?: 'phone' | 'mid' | 'wide'; children?: React.ReactNode;
 }) {
-  const [showReply, setShowReply] = useState(false);
-  const reveal = card.reveal ?? {};
+  // Read only now, after his answer: the card's answer never reaches the question panel.
+  const view = useMemo(() => safeReveal(question, card), [question, card]);
+  const gameUrl = card.reveal?.gameUrl;
   const correct = choice === card.kind;
-  const replySan = reveal.replyLineSan ?? [];
-  const replyUci = reveal.replyLineUci ?? [];
-  const after = showReply ? fenAfterMove(question.fen, question.playedUci) : null;
   const verdict = correct ? 'Right.' : choice === 'unsure' ? 'Here is the answer.' : 'Not this time.';
-  const fact = card.kind === 'safe' ? 'This move was safe.' : 'This move lost something.';
+  // The reply line opens on his move (step 1), so its first request is to guess the reply; the engine's choice waits
+  // one press away. Stepping records nothing.
+  const viewers = (view.reply || (view.best && view.best.line.length > 1)) ? <div className="teach-viewers">
+    {view.reply && <LineViewer key={`reply-${question.id}`} title={view.reply.title} startFen={question.fen} line={view.reply.line} orientation={question.side}
+      initialStep={1} verdict={view.reply.verdict} noChangeSentence={false}/>}
+    {view.best && view.best.line.length > 1 && <div className="teach-more"><LineViewer key={`best-${question.id}`} title={view.best.title} startFen={question.fen} line={view.best.line} orientation={question.side}
+      verdict={view.best.verdict} noChangeSentence={false} defaultOpen={false} toggleLabel={view.best.toggle}/></div>}
+  </div> : null;
   return <div className="practice-layout safe-card">
     <div className="board-column">
-      <div className="board-top"><span className={`turn-dot ${question.side}`}/><strong>{`You played ${sideName(question.side)}`}</strong><span>{showReply && after ? 'After your move' : 'From your game'}</span></div>
-      <Chessboard fen={after ?? question.fen} orientation={question.side} disabled arrow={after ? replyUci[0] : question.playedUci} lastMove={after ? question.playedUci : undefined}/>
-      <div className="board-caption"><span>{showReply && after ? 'The arrow shows their reply.' : 'The arrow shows your move.'}</span><span>{question.title ?? ''}</span></div>
+      <div className="board-top"><span className={`turn-dot ${question.side}`}/><strong>{`You played ${sideName(question.side)}`}</strong><span>From your game</span></div>
+      <Chessboard fen={question.fen} orientation={question.side} disabled arrow={question.playedUci}/>
+      <div className="board-caption"><span>The arrow shows your move.</span><span>{question.title ?? ''}</span></div>
+      {layout === 'mid' && viewers && <div className="board-viewers">{viewers}</div>}
     </div>
     <aside className="coach-panel">
       <div className="coach-heading"><GraduationCap size={24}/><h2>Safe or not?</h2></div>
-      <div className={`feedback ${correct ? 'success' : ''}`} aria-live="polite"><strong>{verdict}</strong> {fact}</div>
+      <div className={`feedback ${correct ? 'success' : ''}`} aria-live="polite"><strong>{verdict}</strong> {view.fact}</div>
       {!saved && <p className="notice error" role="alert">This answer was not saved, so it does not count in your score or schedule. Your earlier answers are unchanged.</p>}
-      {reveal.explanation && <p className="small">{reveal.explanation}</p>}
-      {reveal.bestSan && <p className="small"><strong>The engine’s choice: </strong>{reveal.bestLineSan?.length ? reveal.bestLineSan.join('  ') : reveal.bestSan}</p>}
-      {replySan.length > 0 && <button type="button" className="text-button" aria-expanded={showReply} onClick={() => setShowReply(v => !v)}>{showReply ? 'Hide the reply' : 'Show the reply'}</button>}
-      {showReply && replySan.length > 0 && <p className="small"><strong>Their reply: </strong>{replySan.join('  ')}</p>}
-      {reveal.gameUrl && <a className="small" href={reveal.gameUrl} target="_blank" rel="noreferrer">Open the game on Chess.com</a>}
+      {view.lead && <p className="safe-lead">{view.lead}</p>}
+      {view.best && <p className="small"><strong>The engine’s choice: </strong>{view.best.san}</p>}
+      {view.figures && <p className="small">{view.figures}</p>}
       {score && <SafeScoreLine score={score}/>}
       <button className="primary wide" onClick={onNext}>{nextLabel}<ArrowRight size={18}/></button>
+      {layout !== 'mid' && viewers}
+      {gameUrl && <a className="small" href={gameUrl} target="_blank" rel="noreferrer">Open the game on Chess.com</a>}
       {children}
       <div className="coach-footnote">From an offline engine pass over your games at a fixed depth. It is a strong hint, not proof.</div>
     </aside>

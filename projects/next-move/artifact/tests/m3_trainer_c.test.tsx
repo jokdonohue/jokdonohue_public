@@ -313,7 +313,8 @@ test('drills: the goal kept is a soft retry; the goal lost is an error; words on
   const ra8 = gradeCardTry(krk, krk.fen, 'a7a8', 0, null);
   assert.deepEqual([ra8.grade.action, ra8.grade.message], ['soft', 'That also mates, but not in two. Try again.']);
   const ra8View = tryViewOf(tryKey(krk.id, 0, 'a7a8'), krk.fen, 'a7a8', answerMovesFrom(krk, krk.fen, 0), ra8)!;
-  assert.equal(renderToStaticMarkup(<TrySlot view={ra8View} solving/>), '<div class="try-check"><button type="button" class="secondary line-viewer-toggle" aria-expanded="false">See the tablebase line</button></div>');
+  // Version 7.3: the drill's note is above the toggle, in plain sight (it names no move still to find: `drillTryText`).
+  assert.equal(renderToStaticMarkup(<TrySlot view={ra8View} solving/>), '<div class="try-check"><p class="try-note small">Ra8+ still wins, but the king steps out to h7, and the mate takes one move longer.</p><button type="button" class="secondary line-viewer-toggle" aria-expanded="false">See the tablebase line</button></div>');
   // The mate is counted from the board shown: at step 2 of a mate in two, one move is left.
   assert.deepEqual([drillGoalAt(krk, 0), drillGoalAt(krk, 2)], [{ result: 'win', mateIn: 2 }, { result: 'win', mateIn: 1 }]);
   const kqk = drill('tech-kqk-mate-in-two-king-step');

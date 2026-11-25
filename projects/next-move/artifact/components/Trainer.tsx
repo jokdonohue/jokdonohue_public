@@ -67,7 +67,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Chess } from 'chess.js';
 import { ArrowRight, BookOpen, ChartNoAxesCombined, Check, Flag, GraduationCap, Lightbulb, RefreshCw, RotateCcw, Target, X } from 'lucide-react';
-import Chessboard from './Chessboard';
+import Chessboard, { pieceArt, PIECE_VIEWBOX } from './Chessboard';
 import LineViewer, { sentenceAfterMove, type ViewerNarrateOptions } from './LineViewer';
 import Learn from './Learn';
 import PersonalPackSummary from './PersonalPackSummary';
@@ -112,6 +112,7 @@ import { checkTry, getSharedEngine, searchOnce, type TryCheck } from '@/src/teac
 import { classifyWin, endgameGoal, gradeTry, KEEPS_EDGE_FROM, TRUSTED_DEPTH, type DrillGoal, type Grade } from '@/src/teach/grade';
 import type { AnalysisEngine } from '@/src/analysis/engine';
 import { drillTeach, teachTry } from '@/lib/endgameTeach';
+import { BOARD_THEMES, boardThemeFrom, type BoardTheme } from './boardTheme';
 
 const move = (board: Chess, uci: string) => board.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
 const THEMES: Array<[string, string]> = [
@@ -242,11 +243,25 @@ export function hintButton(shown: number, level3At: number | null, now: number):
   return { label: `Next hint (${shown + 1} of ${HINT_LABELS.length})`, disabled: false };
 }
 
-/** Board marks for the newest hint shown: its square as `hintSquare`; level 4 as an arrow. */
-export function hintMarks(ladder: readonly Hint[] | null, shown: number): { hintSquare?: string; arrow?: string } {
+/** Board marks for the newest hint shown: its square as `hintSquare`; level 4 as an arrow. Version 7.3: a hint that
+ *  names several squares (an endgame drill's key squares) rings every one of them (`hintSquares`). */
+export function hintMarks(ladder: readonly Hint[] | null, shown: number): { hintSquare?: string; hintSquares?: readonly string[]; arrow?: string } {
   const newest = ladder && shown > 0 ? ladder[Math.min(shown, ladder.length) - 1] : undefined;
   if (!newest) return {};
-  return { ...(newest.square ? { hintSquare: newest.square } : {}), ...(newest.level === 4 && newest.arrow ? { arrow: newest.arrow } : {}) };
+  return {
+    ...(newest.square ? { hintSquare: newest.square } : {}), ...(newest.squares && newest.squares.length > 1 ? { hintSquares: newest.squares } : {}),
+    ...(newest.level === 4 && newest.arrow ? { arrow: newest.arrow } : {}),
+  };
+}
+
+/**
+ * Version 7.3: once an endgame drill is complete, its key squares are ringed on the board, so the explanation's "guards
+ * b6 and c6" can be read off the position. Only then: while he solves, the squares appear with the second hint, as any
+ * hint does. Empty for every other card and for a drill without key squares.
+ */
+export function drillKeySquares(item: Pick<TrainerItem, 'id' | 'themes'> | null | undefined, complete: boolean): readonly string[] {
+  if (!item || !complete || !isEndgameDrill(item)) return [];
+  return drillTeach(item.id)?.keySquares ?? [];
 }
 
 /** The hint text under its label: a leading "Target:" or "Targets:" is dropped, the label already says it. */
@@ -579,7 +594,11 @@ export function TrySlot({ view, solving }: { view: TryView | null; solving: bool
     // line on a phone (9.10 h, extended by 9.11.3 to every counted miss), where it is one press away too.
     const closed = view.collapsed || byBoard ? { defaultOpen: false, toggleLabel: tryToggleLabel(view) } : {};
     const { verdict, omit } = tryViewerOptions(view, solving);
-    return <div className="try-check"><LineViewer key={view.key} title={view.title} startFen={view.fenBefore} line={line} orientation={sideOf(view.fenBefore)} intro={view.intro}
+    // 7.3: an endgame drill's own note is the reason the try fails (authored, and already cleared of every move still
+    // to find: `drillTryText`). It stands above the line, in plain sight. Until 7.3 it was only the viewer's caption
+    // one step back from where the viewer opens, so it was read only by pressing Back.
+    const note = view.source === 'tablebase' && view.intro ? view.intro : '';
+    return <div className="try-check">{note && <p className="try-note small">{note}</p>}<LineViewer key={view.key} title={view.title} startFen={view.fenBefore} line={line} orientation={sideOf(view.fenBefore)} intro={note ? undefined : view.intro}
       initialStep={1} verdict={verdict} omit={omit} noChangeSentence={false} {...closed}/></div>;
   }
   return view.intro ? <p className="try-check small">{view.intro}</p> : null;
@@ -1672,6 +1691,7 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [active, fen, index, shownNow > 0]);
   const marks = hintMarks(ladder, shownNow);
+  const keySquaresNow = drillKeySquares(active, complete);
   const hintBtn = active && !complete ? hintButton(shownNow, shownNow === 3 ? hintStep.at : null, Date.now()) : null;
   // 8.16: re-render when the move hint becomes available.
   useEffect(() => {
@@ -1721,12 +1741,12 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
     if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
   }, [notesAsked]);
 
-  return <NotHeldSiblings.Provider value={notHeldSiblings}><div className="app-shell">
+  return <NotHeldSiblings.Provider value={notHeldSiblings}><div className="app-shell" data-board={view.board}>
     <aside className="sidebar">
-      <a className="brand" href="#" onClick={e => { e.preventDefault(); goTab('practice'); }}><span className="brand-piece">♞</span><span>Next Move<small>Your practice room</small></span></a>
+      <a className="brand" href="#" aria-label="Next Move" onClick={e => { e.preventDefault(); goTab('practice'); }}><svg className="brand-piece" viewBox={PIECE_VIEWBOX} aria-hidden="true">{pieceArt('w', 'n')}</svg><span>Next Move<small>Your practice room</small></span></a>
       <nav aria-label="Main navigation">{[{ id: 'practice', label: 'Practice', Icon: Target }, { id: 'games', label: 'My games', Icon: Flag }, { id: 'learn', label: 'Learn', Icon: BookOpen }, { id: 'progress', label: 'Progress', Icon: ChartNoAxesCombined }].map(({ id, label, Icon }) =>
         <button key={id} className={tab === id ? 'nav active' : 'nav'} onClick={() => goTab(id)} aria-current={tab === id ? 'page' : undefined}><Icon size={20}/><span>{label}</span>{id === 'practice' && due > 0 && <b>{due}</b>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="profile-dot">♔</div><p>A little, often.<small>Patterns grow with practice.</small></p></div>
+      <div className="sidebar-bottom"><div className="profile-dot"><svg viewBox={PIECE_VIEWBOX} aria-hidden="true">{pieceArt('w', 'k')}</svg></div><p>A little, often.<small>Patterns grow with practice.</small></p></div>
     </aside>
     <main>
       <header className="topbar"><span>{tab === 'practice' ? 'Make the next move count.' : tab === 'games' ? 'Your games are your curriculum.' : tab === 'learn' ? 'Understand the idea. Then rehearse it.' : 'See what your practice is showing.'}</span><span className="save-status"><i/>{view.ready ? status : 'Loading…'}</span></header>
@@ -1739,7 +1759,7 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
           <DocErrorLine count={view.docErrors.length}/>
           <div className="page-heading"><div><h1>{mode === 'today' && theme === 'all' ? 'Today’s set' : theme === EXTRA && extra.current ? `Extra practice: ${extra.current.label}` : 'Your next position'}</h1><p>Take your time. Find the idea, then calculate the reply.</p></div></div>
           {safeQ && !dailyDone ? (safeAns
-            ? <SafeAnswerPanel key={`a-${safeQ.q.id}`} question={safeQ.q} card={safeAns.card} choice={safeAns.choice} saved={safeAns.saved} score={safeNow} onNext={() => choose()} nextLabel={mode === 'today' && theme === 'all' ? 'Next position' : 'Keep practising'}>
+            ? <SafeAnswerPanel key={`a-${safeQ.q.id}`} question={safeQ.q} card={safeAns.card} choice={safeAns.choice} saved={safeAns.saved} score={safeNow} layout={layout} onNext={() => choose()} nextLabel={mode === 'today' && theme === 'all' ? 'Next position' : 'Keep practising'}>
                 <FeedbackBar itemId={safeQ.q.id} onSend={sendFeedback} onInteract={cancelAdvance}/></SafeAnswerPanel>
             : <SafeQuestionPanel key={`q-${safeQ.q.id}`} question={safeQ.q} onAnswer={answerSafe}>
                 <FeedbackBar itemId={safeQ.q.id} onSend={sendFeedback} onInteract={cancelAdvance}/></SafeQuestionPanel>)
@@ -1748,7 +1768,7 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
               <div className="board-top"><span className={`turn-dot ${turn}`}/><strong>{punish ? `You play ${turn === 'w' ? 'White' : 'Black'}: punish it` : `${turn === 'w' ? 'White' : 'Black'} to move`}</strong>
                 <span>{punish ? 'Your opponent’s side' : active.themes.includes('personal') || active.source === 'pack' ? 'From your game' : active.source === 'agent' ? (active.title ?? 'Set from Claude') : isEndgameDrill(active) ? `${drillGoal(active)} · Estimated difficulty ${active.rating}` : `Puzzle difficulty ${active.rating}`}</span></div>
               <Chessboard key={active.id} fen={fen} orientation={turn} onMove={play} onIllegal={() => { if (!complete) setFeedback('That move is not legal in this position.'); }} disabled={complete || locked}
-                lastMove={lastMove} hintSquare={marks.hintSquare} arrow={marks.arrow}/>
+                lastMove={lastMove} hintSquare={marks.hintSquare} hintSquares={keySquaresNow.length ? keySquaresNow : marks.hintSquares} arrow={marks.arrow}/>
               <div className="board-caption"><span>Tap a piece, then its destination.</span><span>{detail ? `From your ${detail.timeClass} game, ${detail.date}` : active.themes.includes('personal') ? (active.title ? `${active.title} · saved engine candidate` : 'Saved engine candidate') : isEndgameDrill(active) ? 'Tablebase-verified drill' : active.source === 'bank' ? `Lichess ${active.id}` : ''}</span></div>
             </>,
             advance: advancing && <div className="advance-note" role="status"><span>Next position in a moment.</span><button type="button" className="text-button" onClick={cancelAdvance}>Stay here</button></div>,
@@ -1804,6 +1824,7 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
               {themeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               {theme === EXTRA && extra.current && <option value={EXTRA}>{`Extra practice: ${extra.current.label}`}</option>}
             </select>
+            <BoardLook where="practice" value={view.board} unsaved={view.boardUnsaved} saving={view.boardSaving} onChange={b => model.saveBoard(b)}/>
             <button className="text-button" onClick={() => choose()}><RefreshCw size={16}/>Another position</button></div>
           <PlanAndNotes id="from-claude" plan={plan} notes={view.notes} pretty={pretty} onRead={id => void model.markNoteRead(id)}/>
           <AnswersArea items={view.answeredFeedback} titleOf={titleOf} solving={boardUnsolved && !notesAsked} onShow={showNotesNow}/>
@@ -1843,6 +1864,7 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
               <select id="new-cap" value={view.settings.dailyNewCap} onChange={e => void model.saveSettings({ dailyNewCap: Number(e.target.value) })}>{[0, 5, 10, 15, 20].map(n => <option key={n}>{n}</option>)}</select>
               <label htmlFor="review-cap">Reviews a day</label>
               <select id="review-cap" value={view.settings.dailyReviewCap} onChange={e => void model.saveSettings({ dailyReviewCap: Number(e.target.value) })}>{[10, 20, 30, 50].map(n => <option key={n}>{n}</option>)}</select>
+              <BoardLook where="settings" value={view.board} unsaved={view.boardUnsaved} saving={view.boardSaving} onChange={b => model.saveBoard(b)}/>
               <details><summary>How the practice mix works</summary>
                 <p className="small">Each day’s set holds up to {caps.reviewCap} reviews and {caps.newCap} new positions; both numbers are a judgement call, not a validated prescription. When Claude has set a focus, those themes come up more often and positions are drawn from your games, puzzles and endgames in the proportions Claude chose.</p>
                 <p className="small">Clean recalls return after 1, 3, 7, 14, 30, then 60 days. Supported answers return after 10 minutes. These intervals and weights are product heuristics, not a validated prescription.</p>
@@ -1853,6 +1875,39 @@ export default function Trainer({ store, deviceId, sessions, coach, saveFile }: 
       <footer className="site-footer"><span>Next Move · Completed-game study and deliberate practice.</span><button onClick={() => { goTab('learn'); setShowSources(true); }}>Sources & approach</button><span>Includes Stockfish, free software under the GNU General Public License v3.</span><a href="COPYING-GPL-3.0.txt" target="_blank" rel="noreferrer">GPL-3.0 licence</a><a href="https://github.com/nmrugg/stockfish.js" target="_blank" rel="noreferrer">Engine source</a></footer>
     </main>
   </div></NotHeldSiblings.Provider>;
+}
+
+/** What the board switch says when the database did not take a change (7.3: only what the page really keeps). */
+export const BOARD_NOT_SAVED = 'Changed on this page only: it could not be saved just now.';
+/** The retry beside that line: a select does not fire again for the option it already shows, so "choose it again" would
+ *  have meant choosing another board first. */
+export const BOARD_SAVE_AGAIN = 'Try saving again';
+/** The retry's label while its write is out: the sign that a press did something, also when it is refused again. */
+export const BOARD_SAVING = 'Saving…';
+/**
+ * Version 7.2: the board switch, under the board ("practice") and in "Shape your practice" ("settings"). The board
+ * changes at once; the line under the control is shown only while the board on show is a choice the database refused.
+ * Version 7.3: that line is the toolbar's own last row, not inside the switch (where it squeezed the control to a few
+ * pixels), and it carries its own retry. Whether the choice is unsaved, and whether a write is out, come from the
+ * model (`boardUnsaved`, `boardSaving`): both switches then say the same, the line survives a change of tab, and it
+ * goes by itself when the database shows a later write.
+ */
+export function BoardLook({ value, unsaved = false, saving = false, onChange, where }: {
+  value: BoardTheme; unsaved?: boolean; saving?: boolean; onChange: (board: BoardTheme) => Promise<boolean>; where: 'practice' | 'settings';
+}) {
+  const select = useRef<HTMLSelectElement>(null);
+  const id = `board-look-${where}`;
+  // The retry leaves with the line when the save goes through: focus then returns to the switch, unless he has moved
+  // on to another control meanwhile (review of 7.3, P2-5).
+  const again = async (button: HTMLElement) => {
+    if (!(await onChange(value))) return;
+    const at = document.activeElement;
+    if (!at || at === document.body || at === button) select.current?.focus();
+  };
+  const control = <select ref={select} id={id} value={value} onChange={e => { void onChange(boardThemeFrom(e.target.value)); }}>{BOARD_THEMES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}</select>;
+  const status = unsaved ? <p className="small board-look-note" role="status">{BOARD_NOT_SAVED} <button type="button" className="text-button" aria-disabled={saving || undefined} onClick={e => { if (!saving) void again(e.currentTarget); }}>{saving ? BOARD_SAVING : BOARD_SAVE_AGAIN}</button></p> : null;
+  if (where === 'settings') return <><label htmlFor={id}>Board colours</label>{control}<p className="fine-print">Green, blue or brown squares. The choice follows you to your other devices.</p>{status}</>;
+  return <><div className="board-look"><label htmlFor={id}>Board</label>{control}</div>{status}</>;
 }
 
 /** `settings.chesscomUser`: read by Claude's game import (scripts/ingest.md) and used for the archive link (review P2-8). */

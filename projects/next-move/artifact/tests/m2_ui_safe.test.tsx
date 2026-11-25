@@ -116,20 +116,37 @@ test('D4: the question markup is byte-identical whatever the answer key says, an
   assert.match(ha, /class="board-arrow"/);
 });
 
-test('D4: after the answer: verdict, explanation, best move, a "Show the reply" toggle and the game link', () => {
+// Version 7.3 rewrote the answer panel. Until then this test asked for the producer's sentence and a "Show the reply"
+// toggle; now the panel says what the stored line shows and steps through it in the line viewer. What it says is
+// tested in tests/m73_safe_reveal.test.ts.
+test('D4 (7.3): after the answer: the result, the lead, the reply line as a viewer open on his move, the engine\'s choice and the game link', () => {
   const c = card('judge-g1:5', 'unsafe');
   const q = safeQuestion(c)!;
   const html = renderToStaticMarkup(<SafeAnswerPanel question={q} card={c} choice="unsure" score={null} onNext={() => undefined} nextLabel="Next position"/>);
   assert.match(html, /Here is the answer\./);
   assert.match(html, /This move lost something\./);
-  assert.match(html, /Invented explanation B/);
+  assert.match(html, /<p class="safe-lead">[^<]+<\/p>/);
+  assert.doesNotMatch(html, /Invented explanation B/, 'the producer\'s sentence is not printed when the card stores a reply line');
   assert.match(html, /The engine’s choice: <\/strong>Bb5/);
-  assert.match(html, /Show the reply/);
-  assert.doesNotMatch(html, /Their reply/, 'the reply line stays folded until asked');
+  assert.doesNotMatch(html, /Show the reply|Their reply/, 'the old toggle is gone');
+  assert.match(html, /<section class="line-viewer"/);
+  assert.match(html, /The engine’s line after your move Bc4/);
+  assert.match(html, /Guess the next move, then press Next\./, 'the viewer opens on his move and asks for the reply');
+  assert.doesNotMatch(html, /Nd4/, 'the reply is not named before he steps to it');
+  assert.match(html, /href="https:\/\/example\.invalid\/g\/1"/);
+  // Next comes before the viewers, as after every other card.
+  assert.ok(html.indexOf('Next position') < html.indexOf('class="line-viewer"'));
   const right = renderToStaticMarkup(<SafeAnswerPanel question={q} card={c} choice="unsafe" score={null} onNext={() => undefined} nextLabel="Next"/>);
   assert.match(right, /Right\./);
+  // From 651 to 1000 px the viewers sit under the board, where the panel is narrowest (as after any other card).
+  const mid = renderToStaticMarkup(<SafeAnswerPanel question={q} card={c} choice="unsafe" score={null} onNext={() => undefined} nextLabel="Next" layout="mid"/>);
+  assert.match(mid, /<div class="board-viewers"><div class="teach-viewers"><section class="line-viewer"/);
+  assert.ok(mid.indexOf('class="line-viewer"') < mid.indexOf('class="coach-panel"'));
+  // A sound move stores no reply line: no viewer, and without stored figures the producer's sentence is kept.
   const noReply = renderToStaticMarkup(<SafeAnswerPanel question={q} card={card('judge-g1:6', 'safe', { reveal: { explanation: 'Safe.' } })} choice="safe" score={null} onNext={() => undefined} nextLabel="Next"/>);
-  assert.doesNotMatch(noReply, /Show the reply/);
+  assert.doesNotMatch(noReply, /line-viewer/);
+  assert.match(noReply, /This move was safe\./);
+  assert.match(noReply, /<p class="safe-lead">Safe\.<\/p>/);
 });
 
 test('safe answers stay out of the ordinary schedule, skills and snapshot rates', () => {

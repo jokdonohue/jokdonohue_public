@@ -16,6 +16,8 @@ import {
 } from '@/src/contract/docs';
 import { toStoreError, type ConnectionState, type SaveState, type SessionWriter, type Store, type StoreDoc, type Unsubscribe } from '@/src/contract/store';
 import { readTeachMeta, TEACH_META_PATH, type TeachHeld, type TeachRead, type TeachThreat } from '@/src/contract/teachDocs';
+import { cacheBoardTheme, cachedBoardTheme } from '@/src/store/boardCache';
+import { boardFromPrefs, DEFAULT_BOARD_THEME, prefsBody, prefsStamp, UI_PREFS_PATH, type BoardTheme } from './boardTheme';
 import { DEFAULT_NEW_CAP, DEFAULT_REVIEW_CAP } from './daily';
 import { isPutBack } from './leech';
 
@@ -108,6 +110,18 @@ export interface TrainerView {
    * object until the stored document changes, so it can be a memo dependency.
    */
   teach: LoadedTeach | null;
+  /**
+   * Version 7.2: the board look. From `prefs/ui` when the database holds one this version knows, otherwise what this
+   * browser last showed, otherwise the default. Never part of `ready`: the page opens with the cached or default
+   * board and switches if the database says otherwise.
+   */
+  board: BoardTheme;
+  /**
+   * Version 7.3: the board on show is a choice the database refused (`boardUnsaved`), and a board write is out
+   * (`boardSaving`). Kept here and not in the switch, so both switches say it and it survives a change of tab.
+   */
+  boardUnsaved: boolean;
+  boardSaving: boolean;
   /** M2 (D10): agent documents that failed validation and were skipped (newest first, at most 20). */
   docErrors: DocError[];
   /** Plain-language problem to show, or ''. */
@@ -128,6 +142,14 @@ export interface TrainerModel {
   record(attempt: SessionAttempt): boolean;
   saveSettings(patch: Partial<Pick<SettingsDoc, 'rating' | 'sessionLength' | 'dailyReviewCap' | 'dailyNewCap' | 'chesscomUser' | 'myNames'>>): Promise<boolean>;
   markNoteRead(id: string): Promise<void>;
+  /**
+   * Version 7.2: change the board look. The board changes at once on this page; the result says whether the database
+   * took it. False: the choice holds on this page (`boardUnsaved`) until it is saved by another call, or until the
+   * database shows a later write; the database keeps the earlier board and nothing is sent again by itself.
+   * 7.3: writes go one at a time, and every call made while one is in flight resolves with the last choice's result;
+   * this browser remembers a choice only once the database has taken it.
+   */
+  saveBoard(board: BoardTheme): Promise<boolean>;
   sendFeedback(input: FeedbackInput): Promise<boolean>;
   dismissError(): void;
   dispose(): void;
@@ -283,6 +305,28 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
   let teach: LoadedTeach | null = null;
   /** The stored `teach/meta` body behind `teach`, as JSON: an unchanged redelivery keeps the same `teach` object. */
   let teachBody = '';
+  /** Version 7.2: the board look. */
+  let board: BoardTheme = cachedBoardTheme() ?? DEFAULT_BOARD_THEME;
+  /**
+   * Version 7.3 (review of 7.2, P2-2 to P2-5). A board chosen on this page that the database has not confirmed: being
+   * written, or refused. While it is set, what the database says about the board is not applied, so the choice stands on
+   * this page; no clock is compared (7.2 compared the stored `updatedAt`, another device's clock, with this page's).
+   */
+  let boardPending: BoardTheme | null = null;
+  /** The one board write in flight. A choice made meanwhile is written when it settles, so the last choice is stored. */
+  let boardFlush: Promise<boolean> | null = null;
+  /** The last board write was refused and `boardPending` still holds that choice. */
+  let boardUnsaved = false;
+  /**
+   * `prefs/ui` exists (last delivery): a change is then merged into it, so a field a later version keeps there stays.
+   * Null until the first delivery (or for good, when the store refuses the subscription): then it may exist, and a
+   * change is merged first all the same.
+   */
+  let prefsExists: boolean | null = null;
+  /** The last delivered `prefs/ui` body as text. A delivery that differs from it means someone wrote since. */
+  let prefsSeen = '';
+  // The three fields of the document as last delivered: what identifies one write of it (review of 7.3, D-4).
+  let prefsStampSeen = '';
   let safeToken = 0;
   let safeRetry: ReturnType<typeof setTimeout> | null = null;
   /** D10: unreadable agent documents by path; `at` is when this page first saw the current issue. */
@@ -325,7 +369,7 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
     return {
       ready: isReady(), synced: confirmed.settings && confirmed.sessions, connection: store.connection(), saveState: sessions.saveState(), unconfirmed: sessions.unconfirmed().length, settings, attempts, putBacks, pack, plan, notes,
       // A flag on a set id sets the whole drill set aside; flags on card ids are applied by selection.
-      openFeedback, answeredFeedback, flaggedWrong: flagged, drills: drills.filter(set => !flagged.has(set.id)), personal, safe, openings, transfer, teach,
+      openFeedback, answeredFeedback, flaggedWrong: flagged, drills: drills.filter(set => !flagged.has(set.id)), personal, safe, openings, transfer, teach, board, boardUnsaved, boardSaving: boardFlush !== null,
       docErrors: [...docErrors.values()].sort((a, b) => b.at - a.at || (a.path < b.path ? -1 : 1)).slice(0, MAX_DOC_ERRORS), error,
     };
   }
@@ -484,6 +528,30 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
   } catch {
     arrived.teach = true;
   }
+  // Version 7.2: `prefs/ui`, the board look, in a collection of its own (an earlier version's page never reads it).
+  // Never part of `ready` and never an error line: absent, unreadable or naming a board this version does not know
+  // leaves the board as it is. A store that refuses the subscription must never stop the page.
+  // Version 7.3. While a write of this page is out, a delivery is not applied: the write's result, and one read after
+  // it, settle the board. A refused choice stays on show, with its note, until the database changes: a delivery that
+  // differs from the one before it means someone wrote since (another device, or this page's own write landing after
+  // all), and then the database is followed again. The first delivery says nothing of the kind.
+  try {
+    unsubs.push(store.subscribe(UI_PREFS_PATH, doc => {
+      const text = doc ? JSON.stringify(doc.data) : '';
+      const wroteSince = prefsExists !== null && text !== prefsSeen;
+      prefsExists = !!doc; prefsSeen = text; prefsStampSeen = doc ? prefsStamp(doc.data) : '';
+      if (boardFlush) return;
+      const stored = boardFromPrefs(doc?.data);
+      if (!stored) return;
+      let changed = false;
+      if (boardPending !== null) {
+        if (!wroteSince) return;
+        boardPending = null; boardUnsaved = false; changed = true;
+      }
+      if (stored !== board) { board = stored; changed = true; }
+      if (changed) { cacheBoardTheme(stored); emit(); }
+    }, () => { /* the board keeps its current look */ }));
+  } catch { /* as above */ }
   // M2 (D8, D9): agent read-outs. Never part of `ready`; absent or unreadable means the section is not shown.
   unsubs.push(store.subscribe(paths.openingAccidents(), doc => {
     openings = doc ? readDoc<OpeningsDoc>(paths.openingAccidents(), doc.data) : null;
@@ -502,6 +570,38 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
   unsubs.push(() => { if (packRetry) clearTimeout(packRetry); packRetry = null; });
   unsubs.push(() => { if (safeRetry) clearTimeout(safeRetry); safeRetry = null; });
   }
+  /**
+   * Version 7.3 (P2-5): the board choice is merged into `prefs/ui` when the document exists, so a preference a later
+   * version keeps in the same document is not wiped by this page; it is created otherwise. `update` on a missing
+   * document is refused with `invalid_argument` (the document was deleted since the last delivery): then it is created.
+   */
+  async function writeBoard(next: BoardTheme): Promise<boolean> {
+    const body = prefsBody(next, now(), deviceId);
+    // Not known to be absent: merge first. That covers a change made before the first delivery and a store that
+    // refused the subscription, where a whole-document write would wipe a field another version keeps there.
+    if (prefsExists !== false) {
+      try { await store.update(UI_PREFS_PATH, body); prefsExists = true; return true; }
+      catch (e) { if (toStoreError(e).code !== 'invalid_argument') return false; }
+    }
+    try { await store.set(UI_PREFS_PATH, body); prefsExists = true; return true; } catch { return false; }
+  }
+  /**
+   * After a board write is acknowledged: another device may have written between this page's write landing and its
+   * acknowledgement, and those deliveries were not applied. One read settles it; the database's board is the last word.
+   * `before` is the stamp of the document as last delivered before this page's write went out: a read that still
+   * returns that document lags behind the write and is no later word (review of 7.3, D-4).
+   */
+  async function followLaterWrite(wrote: BoardTheme, before: string): Promise<void> {
+    try {
+      const doc = await store.get(UI_PREFS_PATH);
+      // Only what the database itself holds is a later word: a cached copy may be older than the write just made.
+      if (!doc || doc.meta?.fromCache) return;
+      if (before && prefsStamp(doc.data) === before) return;
+      const stored = boardFromPrefs(doc.data);
+      if (stored && stored !== wrote && boardPending === null) { board = stored; cacheBoardTheme(stored); }
+    } catch { /* the next delivery settles it */ }
+  }
+
   function stop() { started = false; for (const u of unsubs.splice(0)) u(); }
   if (!options.lazy) start();
 
@@ -535,6 +635,29 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
     async markNoteRead(id) {
       readLocally.add(id); emit();
       try { await store.update(paths.note(id), { readAt: now() }); } catch { /* shown as read on this device; retried next time */ }
+    },
+    saveBoard(next) {
+      board = next; boardPending = next;
+      // One write at a time (7.3, P2-3): the store retries a failed write once after a pause, and a second write sent
+      // meanwhile could land first and then be overwritten by the older one.
+      boardFlush ??= (async (): Promise<boolean> => {
+        for (;;) {
+          const want: BoardTheme | null = boardPending;
+          if (want === null) return true;
+          const before = prefsStampSeen;
+          const ok = await writeBoard(want);
+          if (boardPending !== want) continue; // a newer choice was made while this one was being written
+          if (!ok) { boardUnsaved = true; return false; } // refused: it stays pending, so this page keeps the choice
+          // Saved. Only now does this browser remember it: a refused choice must not come back on the next load.
+          boardPending = null; boardUnsaved = false; cacheBoardTheme(want);
+          await followLaterWrite(want, before);
+          if (boardPending !== null) continue; // chosen while that read was out
+          return true;
+        }
+      })().finally(() => { boardFlush = null; emit(); });
+      emit();
+      // Every caller gets the result of the last choice, so a late result of an earlier one never reports on it.
+      return boardFlush;
     },
     async sendFeedback(input) {
       let at = now();

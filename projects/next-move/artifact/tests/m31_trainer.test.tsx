@@ -458,7 +458,8 @@ test('C, the not-held sibling reaches the notes and the viewers through the pool
   assert.ok(viewers.includes('Show what Rd7 allowed'));
   // Wiring: the Trainer provides the ids from the pools; the two components read them by the card's id.
   assert.match(src, /const notHeldSiblings = useMemo\(\(\) => notHeldSiblingIds\(pools\), \[pools\]\);/);
-  assert.match(src, /return <NotHeldSiblings\.Provider value=\{notHeldSiblings\}><div className="app-shell">/);
+  // Version 7.2: the wrapper also carries the board look (`data-board`); the provider still wraps the whole page.
+  assert.match(src, /return <NotHeldSiblings\.Provider value=\{notHeldSiblings\}><div className="app-shell" data-board=\{view\.board\}>/);
   for (const name of ['SolvedNotes', 'SolvedViewers']) assert.match(body(name), /const siblingNotHeld = useContext\(NotHeldSiblings\)\.has\(item\.id\);/);
   assert.equal(count(src, '<SolvedNotes item={active} sibling={sibling} lesson={lesson}/>'), 1);
   assert.equal(count(src, '<SolvedViewers item={active} sibling={sibling} assisted={assisted} onOpen={cancelAdvance} latest={tryView}/>'), 1);
@@ -677,7 +678,9 @@ test('4.8: P, L, V and both parts of C are built and rendered only in the Traine
   // The stylesheet block is appended and only lays out.
   const at = css.indexOf('/* ---- Part 13: version 7.1');
   assert.ok(at > css.indexOf('/* ---- Part 12: M3 fix round 3 (FX2e'), 'Part 13 after Part 12');
-  const rules = css.slice(css.indexOf('*/', at) + 2).trim().split('\n');
+  // Version 7.2 appends part 14 after this block, so the block ends at the next part's marker.
+  const next = css.indexOf('/* ---- Part 14', at);
+  const rules = css.slice(css.indexOf('*/', at) + 2, next < 0 ? undefined : next).trim().split('\n');
   assert.deepEqual(rules, ['.teach-more{display:grid;margin:8px 0}', '.study-item .almost-line{margin:6px 0 10px}']);
   assert.ok(!/#[0-9a-fA-F]{3,8}\b|rgb|var\(|,/.test(rules.join('')), 'no colour, no token, no comma selector');
 });

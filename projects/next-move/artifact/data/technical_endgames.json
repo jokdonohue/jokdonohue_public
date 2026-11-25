@@ -243,7 +243,7 @@
     ],
     "gameUrl": "",
     "title": "Lose the pawn but keep the opposition",
-    "explanation": "The c5 pawn cannot be held, so plan the position after it falls. Kb7 is a waiting move. When White takes on c5, you answer Kc7 and own the opposition. Kc7 at once would leave you to move after Kxc5, which loses the opposition and the game."
+    "explanation": "The c5 pawn cannot be held. White then wins only by getting its king to b6, c6 or d6. Kb7 waits; after Kxc5, Kc7 faces the king and guards all three. After Kb5, follow it with Kb7, which guards b6 and c6; Kd7 would leave b6 open. Kc7 at once loses: you would have to move after Kxc5."
   },
   {
     "id": "tech-kpkp-go-around",

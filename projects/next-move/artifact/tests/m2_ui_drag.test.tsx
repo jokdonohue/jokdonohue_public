@@ -57,7 +57,8 @@ test('D11: tap-tap markup unchanged (64 square buttons); touch-action none only 
   assert.doesNotMatch(renderToStaticMarkup(<Chessboard fen={START} disabled arrow="e2e4"/>), /interactive/, 'a display-only board lets the page scroll');
   const src = readFileSync(join(ARTIFACT_DIR, 'components/Chessboard.tsx'), 'utf8');
   assert.match(src, /onPointerDown=\{pointerDown\}/);
-  assert.doesNotMatch(src, /from ['"](?!react|chess\.js|\.\/dragMove)/, 'no new dependency');
+  // Version 7.2 adds './pieceSet', the page's own drawings of the pieces: a local module, not a library.
+  assert.doesNotMatch(src, /from ['"](?!react|chess\.js|\.\/dragMove|\.\/pieceSet)/, 'no new dependency');
 });
 
 test('P2-7a: only a pointer click within 500 ms of a drop is swallowed; keyboard Enter never is', async () => {

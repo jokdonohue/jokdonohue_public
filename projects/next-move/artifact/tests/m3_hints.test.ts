@@ -202,12 +202,15 @@ test('in check at the start, castling given as king-takes-rook, and endgame dril
   const idea = 'Take the opposition: kings face to face with one square between.';
   const e = buildHints({ fen: kpk, line: ['d4e4'], themes: ['endgame-tech', 'pawnEndgame'], kind: 'endgame', idea, keySquares: ['d5', 'e5', 'f5'] });
   assert.equal(e[0].text, idea);
-  assert.deepEqual(e[1], { level: 2, text: 'Key squares: d5, e5 and f5.', square: 'd5' });
+  // Version 7.3: a hint that names several squares carries them all (`squares`), so the board can ring each one.
+  assert.deepEqual(e[1], { level: 2, text: 'Key squares: d5, e5 and f5.', square: 'd5', squares: ['d5', 'e5', 'f5'] });
   assert.deepEqual(e[3], { level: 4, text: 'Play Ke4.', arrow: 'd4e4' });
   const plain = buildHints({ fen: kpk, line: ['d4e4'], themes: [], kind: 'endgame', idea });
   assert.equal(plain[1].text, 'The right move takes the opposition.');
-  // A key square the moving piece is about to leave is left out.
-  assert.deepEqual(buildHints({ fen: kpk, line: ['d4e4'], themes: [], kind: 'endgame', idea, keySquares: ['d4', 'd5'] })[1], { level: 2, text: 'Key square: d5.', square: 'd5' });
+  // A single key square the moving piece is about to leave is left out (the last line below). Version 7.3: a list of
+  // several stays whole. Until 7.3 this case gave "Key square: d5."; in the give-up-the-pawn drill that rule printed
+  // "Key squares: c6 and d6." under an idea that names "b6, c6 or d6", a contradiction at the drill's first step.
+  assert.deepEqual(buildHints({ fen: kpk, line: ['d4e4'], themes: [], kind: 'endgame', idea, keySquares: ['d4', 'd5'] })[1], { level: 2, text: 'Key squares: d4 and d5.', square: 'd4', squares: ['d4', 'd5'] });
   assert.equal(buildHints({ fen: kpk, line: ['d4e4'], themes: [], kind: 'endgame', idea, keySquares: ['d4'] })[1].text, plain[1].text);
   // No idea given: the computed idea is used instead.
   assert.equal(buildHints({ fen: kpk, line: ['d4e4'], themes: [], kind: 'endgame' })[0].text, 'The right move is a quiet one: no capture and no check.');

@@ -39,7 +39,9 @@ import { describeMove, narrateLine, playUci, type NarratedLine, type NarratedPly
 import { PIECE_NAME, PIECE_VALUE, type PieceType, type Side } from './values';
 import { mateCountFromThemes, mateIdea, matePattern, tacticalIdea, themesFitLine } from './themes';
 
-export interface Hint { level: 1 | 2 | 3 | 4; text: string; square?: string; arrow?: string }
+/** `squares` (version 7.3): every square the hint names, when it names more than one (an endgame drill's key squares);
+ *  `square` is then the first of them, as before. */
+export interface Hint { level: 1 | 2 | 3 | 4; text: string; square?: string; arrow?: string; squares?: readonly string[] }
 export interface HintInput {
   fen: string;
   /** Answer line from the CURRENT position, solver first (UCI). */
@@ -390,7 +392,7 @@ function atPuzzleStart(ctx: Ctx): boolean {
   return themesFitLine(ctx.input.themes ?? [], ctx.n.plies.length);
 }
 
-interface Rule { text: string; rule: string; square?: string }
+interface Rule { text: string; rule: string; square?: string; /** 7.3: every square named, when more than one. */ squares?: readonly string[] }
 
 // ---------------------------------------------------------------- level 1
 
@@ -762,9 +764,12 @@ function levelTwo(ctx: Ctx, ideaRule: string): Rule {
     ?? captureTarget() ?? threatTarget() ?? castlingTarget() ?? checkTarget();
   if (first) return first;
   if (input.kind === 'endgame' && Array.isArray(input.keySquares)) {
-    // A key square the moving piece is about to leave is stale at that step ("Key square: c7" next to "Use your king on c7").
-    const keys = input.keySquares.filter(s => typeof s === 'string' && /^[a-h][1-8]$/.test(s) && s !== p0.uci.slice(0, 2));
-    if (keys.length) return { text: `Key square${keys.length === 1 ? '' : 's'}: ${listJoin(keys)}.`, square: keys[0], rule: 'key-squares' };
+    // A single key square the moving piece is about to leave is stale at that step ("Key square: c7" next to "Use your
+    // king on c7"). A list of several stays whole (7.3): they are named as a set, here and in the drill's idea, and a
+    // king stepping off one of them (the give-up-the-pawn drill's b6) does not make the set shorter.
+    const named = input.keySquares.filter(s => typeof s === 'string' && /^[a-h][1-8]$/.test(s));
+    const keys = named.length > 1 ? named : named.filter(s => s !== p0.uci.slice(0, 2));
+    if (keys.length) return { text: `Key square${keys.length === 1 ? '' : 's'}: ${listJoin(keys)}.`, square: keys[0], ...(keys.length > 1 ? { squares: keys } : {}), rule: 'key-squares' };
   }
   const later = laterTarget() ?? defendTarget();
   if (later) return later;
@@ -808,7 +813,7 @@ export function buildHintsWithRules(input: HintInput): { hints: Hint[]; rules: H
   return {
     hints: [
       { level: 1, text: one.text },
-      { level: 2, text: two.text, ...(two.square ? { square: two.square } : {}) },
+      { level: 2, text: two.text, ...(two.square ? { square: two.square } : {}), ...(two.squares?.length ? { squares: two.squares } : {}) },
       { level: 3, text: `Use ${ctx.voice.own(ctx.piece, from)}.`, square: from },
       { level: 4, text: `Play ${ctx.p0.san}.`, arrow: ctx.p0.uci },
     ],

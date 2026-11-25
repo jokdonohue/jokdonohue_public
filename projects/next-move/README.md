@@ -18,6 +18,11 @@ A chess practice web app for adult improvers: tactical puzzles from the Lichess 
     - On a quiet answer, the explanation says what the move threatens, and a viewer shows what the move played in the game allowed.
     - The optional coach is given the line and the page's verdict on the try.
     - The pawn is drawn as a shape, so both sides look right on phones.
+  - Versions 7.2 and 7.3 add:
+    - Three board looks: green (the default), blue (the board of the earlier versions) and brown, switched under the board or in the settings. The choice is stored with the training records, so it follows the user to their other devices.
+    - All six pieces drawn as shapes from one open-licensed set (see "Third-party components and data"), so no piece depends on a device's fonts.
+    - "Safe or not?": after the answer, the page says in one sentence what the move cost, or says plainly that no material is lost in the stored line, and then steps through the reply in words (`artifact/components/safeReveal.ts`).
+    - Endgame drills ring their key squares on the board at the second hint and when the drill is finished, and the stored reason a wrong move fails is shown as soon as the move is played.
   - The database model and the contract for agents that write documents into it (plans, drills, notes) are in `artifact/scripts/ingest.md`. The backup runbook is `artifact/scripts/snapshot-db.md`.
   - `artifact/SOURCE.md` records which files were copied or adapted from `app/`, with their hashes.
 - `app/` is the original build and remains the fallback: a Next.js-style app for a private hosted Site (Cloudflare Worker with a D1 database for signed-in training records). It also runs locally. `app/README.md` holds that build's own notes; a few of them point to project files that are not in this repository.
@@ -44,7 +49,7 @@ node --import tsx --test tests/*.test.*
 node scripts/build.mjs --strict      # writes dist/index.html; takes the engine files from ../app/public/engine
 ```
 
-The repository check (`scripts/check.sh`, also run in CI) covers only the `app/` tests, because the artifact has no test entry of its own. Run the artifact's tests by hand as shown. Without the private seed and profile data, the tests that need them skip themselves, and so do two that check the endgame drill data against a tablebase cache kept outside this repository. In this repository's copy that is 14 of 831, and the other 817 pass.
+The repository check (`scripts/check.sh`, also run in CI) covers only the `app/` tests, because the artifact has no test entry of its own. Run the artifact's tests by hand as shown. Without the private seed and profile data, the tests that need them skip themselves, and so do two that check the endgame drill data against a tablebase cache kept outside this repository. In this repository's copy that is 14 of 875, and the other 861 pass.
 
 ## Data deliberately not in this repository
 
@@ -60,6 +65,8 @@ Both versions can build personal training material from a player's own completed
   - Keep every file in that directory together.
 - Puzzle data (`data/puzzles.json` and `data/puzzle-setup.json` in each tree): a 2,000-puzzle selection from the Lichess open puzzle database, https://database.lichess.org/#puzzles, released under CC0 1.0. Provenance is in the matching `*.provenance.json` files.
 - Technical-endgame drills (`data/technical_endgames.json` in each tree): original project content. Standard textbook positions were re-set; no book text or diagrams were copied. The artifact's `data/technical_endgames_teach.json` adds tries, lines and notes for those drills: the notes are original, and the results and lines were computed from the Lichess Syzygy tablebase (see the provenance file beside it).
+- Chess piece drawings (`artifact/components/pieceSet.ts`, a generated file): the set drawn by Cburnett (Colin M.L. Burnett), taken from Wikimedia Commons (`Chess_{k,q,r,b,n,p}{l,d}t45.svg`, 2006, with later adjustments by Commons contributors). Its author offers it under the GFDL, BSD or GPL licence; it is used here under the BSD licence. The notice is in that file and is shown in the page's Sources panel.
+- Board colours: the green board uses the two square colours of the Chess.com green board, and the brown board's light square is the colour of the Lichess brown board. Nothing else of either site's design is used.
 - chess.js 1.4.0: BSD-2-Clause.
 - shadcn/ui styles (`app/vendor/shadcn-tailwind-4.13.0.css`): MIT; the licence is beside the file.
 - Sites Vite plugin (`app/scripts/vite/sites-vite-plugin.ts`): MIT, © 2026 OpenAI; the licence is beside the file.

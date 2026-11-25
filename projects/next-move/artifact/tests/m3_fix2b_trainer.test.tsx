@@ -331,7 +331,9 @@ test('R6-3: a try viewer opens on his try, asking him to guess the reply; its in
   assert.deepEqual(alone.line, [rg7.uci]);
   assert.match(renderToStaticMarkup(<TrySlot view={alone} solving/>), /<p class="line-viewer-legend">End of the line\.<\/p>/);
   // Wiring: the slot's one viewer; the answer and game viewers still open at the start (they begin at the card).
-  assert.match(body('TrySlot'), /intro=\{view\.intro\}\n\s*initialStep=\{1\} verdict=\{verdict\} omit=\{omit\} noChangeSentence=\{false\} \{\.\.\.closed\}\/>/);
+  // Version 7.3: the intro is still the caption at the start, except a drill's own note, which stands above the viewer
+  // (opening on his try had left that note one press back, where it was not read).
+  assert.match(body('TrySlot'), /intro=\{note \? undefined : view\.intro\}\n\s*initialStep=\{1\} verdict=\{verdict\} omit=\{omit\} noChangeSentence=\{false\} \{\.\.\.closed\}\/>/);
   // Version 7.1 (brief m31 4.4, item C): a second viewer opens on a move he made, the viewer of his game move after a
   // mistake card (`gameMoveViewer`: "opened at step 1"). The count was 1 before 7.1.
   assert.equal(count(src, 'initialStep='), 2);
@@ -369,7 +371,10 @@ test('9.10 (h) extended: on a phone every finished try sits one press away right
     assert.equal(tryCollapsedOnPhone(item, view), true, name);
     assert.equal(tryToggleLabel(view), label, name);
     const phone = columns('phone', item, view);
-    assert.ok(phone.includes(`<i data-part="feedback"></i><div class="try-check"><button type="button" class="secondary line-viewer-toggle" aria-expanded="false">${esc(label)}</button></div><i data-part="ladder"></i>`), `${name}: toggle under the message`);
+    // Version 7.3: a drill's own note stands above its toggle; every other kind is the toggle alone, as before.
+    const note = view.source === 'tablebase' && view.intro ? `<p class="try-note small">${esc(view.intro)}</p>` : '';
+    assert.equal(note !== '', name === 'a drill\'s counted miss', `${name}: only the drill carries a note`);
+    assert.ok(phone.includes(`<i data-part="feedback"></i><div class="try-check">${note}<button type="button" class="secondary line-viewer-toggle" aria-expanded="false">${esc(label)}</button></div><i data-part="ladder"></i>`), `${name}: toggle under the message`);
     assert.doesNotMatch(phone, /class="line-viewer-title"/, `${name}: collapsed`);
     assert.ok(phone.indexOf('class="try-check"') < phone.indexOf('class="coach-panel"'), `${name}: under the board`);
     // Wider: open, no toggle, where it was (the coach panel when wide, under the board from 651 to 1000 px).

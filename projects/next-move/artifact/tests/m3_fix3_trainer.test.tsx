@@ -127,7 +127,10 @@ test('item 6: over all 26 drills, no note shown while solving names a square of 
   assert.deepEqual(leaks, []);
   // Measured in logs/m3_FX2e.md: 177 listed notes, 174 shown before this round, 138 now (V2-1's 16 + 7 + 12, and the
   // "Kxc7" note above). The 3 notes dropped before this round print an answer's SAN.
-  assert.deepEqual({ listed, shown, dropped }, { listed: 177, shown: 138, dropped: 39 });
+  // Version 7.3: 142 shown, 35 dropped. Four notes of the give-up-the-pawn drill, at his second move, said "the pawn
+  // runs to c7" and were dropped for it (c7 is that step's answer square). They were reworded to be read; `leaks`
+  // above still holds for them, as for every other shown note.
+  assert.deepEqual({ listed, shown, dropped }, { listed: 177, shown: 142, dropped: 35 });
   assert.deepEqual(wrongDrops, []);
 });
 

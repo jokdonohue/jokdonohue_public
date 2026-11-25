@@ -177,7 +177,9 @@ test('hint ladder wiring: counted per press, reset per card and step, old fixed 
   assert.match(body('startPuzzle'), /setHints\(0\)[^]*setHintStep\(\{ index: 0, shown: 0, at: 0 \}\)/);
   assert.match(src, /const shownNow = active && !complete && hintStep\.index === index \? hintStep\.shown : 0;/, 'a new step starts a new ladder');
   assert.match(src, /useMemo\(\(\) => \(active && shownNow > 0 \? hintLadderFor\(active, fen, index\) : null\)/, 'built once per card and step, only when asked');
-  assert.match(src, /hintSquare=\{marks\.hintSquare\} arrow=\{marks\.arrow\}/);
+  // Version 7.3: the board also takes several squares at once (a drill's key squares: from the second hint, and on a
+  // finished drill).
+  assert.match(src, /hintSquare=\{marks\.hintSquare\} hintSquares=\{keySquaresNow\.length \? keySquaresNow : marks\.hintSquares\} arrow=\{marks\.arrow\}/);
 });
 
 // ---------------------------------------------------------------- try viewer (L2, L4, 8.2, 9.1 copy)
@@ -239,7 +241,8 @@ test('try slot: "Checking …" while the engine works, then an open viewer of th
   assert.match(html, /<p class="line-viewer-legend">Guess the next move, then press Next\.<\/p>/);
   assert.match(html, /<p class="line-viewer-caption" aria-live="polite"><strong>1\. Qd7<\/strong> /);
   assert.ok(!html.includes(esc(done.intro!)), 'the intro waits at the start');
-  assert.match(body('TrySlot'), /intro=\{view\.intro\}\n\s*initialStep=\{1\} verdict=\{verdict\}/);
+  // Version 7.3: a drill's own note is shown above the viewer and is then not passed as its intro as well.
+  assert.match(body('TrySlot'), /intro=\{note \? undefined : view\.intro\}\n\s*initialStep=\{1\} verdict=\{verdict\}/);
   assert.doesNotMatch(html, /Qxd8/, 'no answer SAN while solving');
   assert.deepEqual(firstSquares(html), ['a8'], 'faces the solver (White)');
   assert.doesNotMatch(html, /aria-expanded="false"/, 'open after a miss');

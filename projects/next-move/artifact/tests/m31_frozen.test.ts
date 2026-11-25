@@ -37,16 +37,32 @@ import { ARTIFACT_DIR } from './b3_paths';
 /**
  * sha256 of the files 7.1 must not change, as version 7 has them (the version 7 tree list of 2026-11-13; the first is
  * also the version 6 value pinned in tests/m3_v6_frozen.test.ts). Brief m31 rule 1.3 and section 10 (03:06).
+ *
+ * Version 7.2 (24 Nov 2026) changes two of the page files on purpose and leaves the contract alone:
+ * `components/Chessboard.tsx` (every piece a drawn shape from `pieceSet.ts`) and `components/Learn.tsx` (the piece
+ * artwork credit and licence on the Sources panel). Those two moved to CHANGED_IN_72, which pins their 7.2 bytes so
+ * that a later accidental edit still shows. The three contract files and the other page files are as version 7 had them.
  */
 const FROZEN: Record<string, string> = {
   'src/contract/docs.ts': '52f5d1909dadc01dc4666ef718dce90f23a3c407787465c467425c5d42207257',
   'src/contract/store.ts': 'c28f9dc73ca2d4da176a4bc2bc4a19ff99ea209eaee5676bc7964752f6396a13',
   'src/contract/coach.ts': '58176263de3e6f45e331311b3c63641aaea530755d3d64078e1b28e55514b5b4',
   'components/LineViewer.tsx': 'c20de49564985096f0c6440d9cc557c05b16a6023d0b6f0bb00d070ed544159f',
-  'components/Chessboard.tsx': '1f591e6c600003540f465eaa17d2509ae2783aafea971e9b448c625015d371ab',
   'components/CoachPanel.tsx': '0571615b162c796e5716a2b41388e88d59d7b1e759e3491c31e0bf214372330e',
-  'components/Learn.tsx': 'bd0300d57ead91703f5f93343dec50a2964d87bbe3f7f7389ef8d6ee443ade7f',
   'src/teach/narrate.ts': '69c7f049b22a9be99939f0c2332d42d2a64c63387750d22ef4993da498c1001c',
+};
+/**
+ * The two page files version 7.2 changed, at their 7.2 bytes. Their version 7 values were
+ * 1f591e6c600003540f465eaa17d2509ae2783aafea971e9b448c625015d371ab (Chessboard.tsx) and
+ * bd0300d57ead91703f5f93343dec50a2964d87bbe3f7f7389ef8d6ee443ade7f (Learn.tsx).
+ * `reviews/claude/tools/pin72.py` rewrites the two values from the files; run it only for a change that is meant.
+ * Version 7.3 (24 Nov 2026) changed both again on purpose, and the pins are their 7.3 bytes: `Chessboard.tsx` takes
+ * `hintSquares` (an endgame drill's key squares, ringed together), and `Learn.tsx` shows the licence one line per
+ * paragraph and credits the brown board's colours. Their 7.2 values were bb0ca9fd0c65fcc9… and b9822f572ba9fb33….
+ */
+const CHANGED_IN_72: Record<string, string> = {
+  'components/Chessboard.tsx': 'cb6e5f72d630256e51d4387afd1ea9500b41978a2ae91adbb5a41b5e793a4892',
+  'components/Learn.tsx': '10dd34ae4e0290a4fa27c7c879e77410b314d6af5518e082e541cac4832809ac',
 };
 const tick = (ms = 5) => new Promise(r => setTimeout(r, ms));
 const after = (fen: string, uci: string) => { const b = new Chess(fen); b.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] }); return b.fen(); };
@@ -128,6 +144,9 @@ function pageSays(pools: Pools) {
 // ---------------------------------------------------------------- 1. hashes
 
 test('7.1 keeps the contract and the other frozen page files byte for byte (sha256 pinned)', () => {
+  for (const [file, sha] of Object.entries(CHANGED_IN_72)) {
+    assert.equal(createHash('sha256').update(readFileSync(join(ARTIFACT_DIR, file))).digest('hex'), sha, `${file} is not the pinned file (version 7.3 bytes): pin the new bytes here if the change is meant`);
+  }
   for (const [file, sha] of Object.entries(FROZEN)) {
     assert.equal(createHash('sha256').update(readFileSync(join(ARTIFACT_DIR, file))).digest('hex'), sha, `${file} changed: version 7.1 must not change it (brief m31 rule 1.3)`);
   }

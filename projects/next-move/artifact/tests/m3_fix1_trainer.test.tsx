@@ -210,7 +210,10 @@ test('9.10 (h): on a phone a collapsed try slot sits right under the message lin
   assert.deepEqual([ra8.status, ra8.collapsed], ['done', true]);
   assert.equal(tryCollapsedOnPhone(krk, ra8), true);
   const html = render('phone', tryCollapsedOnPhone(krk, ra8), { ...markers, trySlot: <TrySlot view={ra8} solving/> });
-  assert.ok(html.includes('<i data-part="feedback"></i><div class="try-check"><button type="button" class="secondary line-viewer-toggle" aria-expanded="false">See the tablebase line</button></div><i data-part="ladder"></i>'));
+  // Version 7.3: a drill's own note (why the try falls short) stands above the toggle, in plain sight. Until 7.3 it was
+  // only the viewer's caption one step back from where the viewer opens, so it was read only by pressing Back.
+  assert.equal(ra8.intro, 'Ra8+ still wins, but the king steps out to h7, and the mate takes one move longer.');
+  assert.ok(html.includes(`<i data-part="feedback"></i><div class="try-check"><p class="try-note small">${esc(ra8.intro!)}</p><button type="button" class="secondary line-viewer-toggle" aria-expanded="false">See the tablebase line</button></div><i data-part="ladder"></i>`));
   assert.equal(count(html, 'line-viewer-toggle'), 1, 'one slot');
   // A drill's counted miss opens its viewer (not collapsed) where the layout keeps it open. FX2c (9.11.3, 9.10 h
   // extended): on a phone it too sits one press away right under the message, its toggle reading "See the line" (it
@@ -220,7 +223,9 @@ test('9.10 (h): on a phone a collapsed try slot sits right under the message lin
   assert.equal(e4.collapsed, undefined);
   assert.equal(tryCollapsedOnPhone(kpk, e4), true);
   const e4Phone = render('phone', tryCollapsedOnPhone(kpk, e4), { ...markers, trySlot: <TrySlot view={e4} solving/> });
-  assert.ok(e4Phone.includes('<i data-part="feedback"></i><div class="try-check"><button type="button" class="secondary line-viewer-toggle" aria-expanded="false">See the line</button></div><i data-part="ladder"></i>'));
+  // Version 7.3: with the drill's note above the toggle, as for the soft retry above.
+  assert.ok(e4.intro, 'this try has an authored note');
+  assert.ok(e4Phone.includes(`<i data-part="feedback"></i><div class="try-check"><p class="try-note small">${esc(e4.intro!)}</p><button type="button" class="secondary line-viewer-toggle" aria-expanded="false">See the line</button></div><i data-part="ladder"></i>`));
   // Wiring: the page passes `tryCollapsedOnPhone` (done and one press away; a check still running never moves), and
   // renders one TrySlot.
   assert.match(src, /\}\} tryCollapsed=\{tryCollapsedOnPhone\(active, tryView\)\}\/> : dailyDone \?/);

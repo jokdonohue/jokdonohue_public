@@ -31,7 +31,9 @@ test('D12: every token used is defined on bare :root; both dark blocks redefine 
 });
 
 test('D12: no literal colour outside the board and pieces, which keep one look in both themes', () => {
-  const allowed = /^(\.turn-dot\.[wb]|\.chessboard|\.square[\w.:-]*|\.dark \.rank,\.dark \.file|\.light \.rank,\.light \.file|\.piece[\w. -]*|\.move-target|\.capture-target|\.promotion-dialog|\.drag-ghost|\.board-arrow[\w ]*|\.trend-point)$/;
+  // Version 7.2: a board look is a block of board tokens on the app wrapper (`.app-shell[data-board="..."]`); the default
+  // board's tokens are on bare :root. A board keeps one look on the light and the dark page.
+  const allowed = /^(\.turn-dot\.[wb]|\.chessboard|\.square[\w.:-]*|\.dark \.rank,\.dark \.file|\.light \.rank,\.light \.file|\.piece[\w. -]*|\.move-target|\.capture-target|\.promotion-dialog|\.drag-ghost|\.board-arrow[\w ]*|\.trend-point|\.app-shell\[data-board="[a-z]+"\])$/;
   const offenders: string[] = [];
   for (const [, sel, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const s = sel.trim();
@@ -43,6 +45,24 @@ test('D12: no literal colour outside the board and pieces, which keep one look i
   }
   assert.deepEqual(offenders, []);
 });
+
+/**
+ * Version 7.2: the board tokens of every board look. Green is the default and lives on bare :root; each other look is
+ * a block on the app wrapper that must redefine every board token (so no value of the default shows through).
+ */
+function boardTokens(): Map<string, Map<string, string>> {
+  const { bare } = blocks();
+  const green = new Map([...bare].filter(([k]) => k.startsWith('--board-')));
+  const out = new Map<string, Map<string, string>>([['green', green]]);
+  for (const m of css.matchAll(/\.app-shell\[data-board="([a-z]+)"\]\s*\{([^{}]*)\}/g)) {
+    const t = tokensIn(m[2]);
+    assert.deepEqual([...t.keys()].sort(), [...green.keys()].sort(), `${m[1]} redefines every board token and no other token`);
+    // 7.3 (review of 7.2, P2-9 d): and it holds nothing but tokens, so a board block cannot restyle anything by itself.
+    for (const d of m[2].split(';').map(x => x.trim()).filter(Boolean)) assert.match(d, /^--board-[a-z-]+:/, `${m[1]} holds a declaration that is not a board token: ${d}`);
+    out.set(m[1], t);
+  }
+  return out;
+}
 
 // WCAG relative luminance contrast.
 function lum(hex: string) {
@@ -63,13 +83,28 @@ test('D12: text pairs reach 4.5:1 in both themes; the save dot and board marks r
     for (const [f, b] of text) assert.ok(ratio(v(theme, f), v(theme, b)) >= 4.5, `${f} on ${b}: ${ratio(v(theme, f), v(theme, b)).toFixed(2)}`);
     assert.ok(ratio(v(theme, '--teal'), v(theme, '--paper')) >= 3, 'save indicator dot');
   }
-  // Board: the same in both themes. Pieces carry a contrasting outline, so each piece is checked by its better edge.
-  const squares = ['#e4edf2', '#6087a6', '#c2d9ad', '#8bb1a1', '#d7bb55'];
-  for (const sq of squares) {
-    assert.ok(Math.max(ratio('#fffefa', sq), ratio('#24374e', sq)) >= 3, `white piece on ${sq}`);
-    assert.ok(Math.max(ratio('#20334c', sq), ratio('#f4f8ff', sq)) >= 3, `black piece on ${sq}`);
+  // Board (version 7.2): one look per board on the light and the dark page. Every piece is drawn in black and white:
+  // a white piece is white inside a black outline and a black piece is black all through, so the black of the drawing
+  // must reach 3:1 on every square colour, the last-move and selected tints included. (7.3, review P2-9 d: a separate
+  // "white piece" line took the better of white and black, which no colour can fail; it is gone.) The arrow and the
+  // coordinates are checked on the squares they sit on, and since 7.3 the hint ring's edge on every square state.
+  const boards = boardTokens();
+  assert.deepEqual([...boards.keys()].sort(), ['blue', 'brown', 'green']);
+  for (const [name, t] of boards) {
+    const v = (k: string) => { const x = t.get(k); assert.ok(x && /^#[0-9a-f]{6}$/.test(x), `${name} ${k}: ${x}`); return x!; };
+    const squares = ['--board-light', '--board-dark', '--board-last-light', '--board-last-dark', '--board-selected-light', '--board-selected-dark'].map(v);
+    for (const sq of squares) {
+      assert.ok(ratio('#000000', sq) >= 3, `${name}: the black of the pieces on ${sq}: ${ratio('#000000', sq).toFixed(2)}`);
+      // Blue is the board of versions 4 to 7.1 value for value, so its ring keeps the old single colour.
+      if (name !== 'blue') assert.ok(ratio(v('--board-hint-edge'), sq) >= 3, `${name}: hint ring edge on ${sq}: ${ratio(v('--board-hint-edge'), sq).toFixed(2)}`);
+    }
+    for (const sq of [v('--board-light'), v('--board-dark')]) assert.ok(ratio(v('--board-arrow'), sq) >= 3, `${name}: arrow on ${sq}: ${ratio(v('--board-arrow'), sq).toFixed(2)}`);
+    assert.ok(ratio(v('--board-coord-on-light'), v('--board-light')) >= 3, `${name}: coordinates on light squares`);
+    assert.ok(ratio(v('--board-coord-on-dark'), v('--board-dark')) >= 3, `${name}: coordinates on dark squares`);
+    assert.notEqual(v('--board-light'), v('--board-dark'));
+    assert.notEqual(v('--board-last-light'), v('--board-light'), `${name}: the last move shows on a light square`);
+    assert.notEqual(v('--board-last-dark'), v('--board-dark'), `${name}: the last move shows on a dark square`);
   }
-  for (const sq of ['#e4edf2', '#6087a6']) assert.ok(ratio(bare.get('--arrow')!, sq) >= 3, `arrow on ${sq}`);
 });
 
 test('D12: every rule with on-accent text sits on an accent fill that reaches 4.5:1 in both themes (and its hover)', () => {
