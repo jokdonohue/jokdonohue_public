@@ -7,8 +7,12 @@ export function trainingThemes(themes) {
   return [...new Set(themes)].filter(theme => !METADATA_THEMES.has(theme));
 }
 
-/** Select a due review or an unseen card; alternate review with exploration. */
-export function selectPuzzle(puzzles, progress, { theme = 'all', now = Date.now(), excludeIds = [] } = {}) {
+/**
+ * Select a due review or an unseen card; alternate review with exploration.
+ * `targetOf(p)` (M3 bank level) is the rating `p` is measured against; `undefined` keeps `settings.rating`, so
+ * without the option nothing changes.
+ */
+export function selectPuzzle(puzzles, progress, { theme = 'all', now = Date.now(), excludeIds = [], targetOf } = {}) {
   const excluded = new Set(excludeIds);
   let pool = puzzles.filter(p => !excluded.has(p.id) && (theme === 'all' || p.themes.includes(theme)));
   if (!pool.length) return null;
@@ -16,6 +20,10 @@ export function selectPuzzle(puzzles, progress, { theme = 'all', now = Date.now(
   if (pool.length > 1) pool = pool.filter(p => p.id !== latest);
   const cards = progress.cards || {};
   const rating = progress.settings?.rating ?? 1000;
+  const target = p => {
+    const t = targetOf?.(p);
+    return typeof t === 'number' && Number.isFinite(t) ? t : rating;
+  };
   const weakness = p => {
     const themes = trainingThemes(p.themes);
     if (!themes.length) return 0.5;
@@ -24,7 +32,7 @@ export function selectPuzzle(puzzles, progress, { theme = 'all', now = Date.now(
       return sum + (s ? (s.attempts - s.successes + 2) / (s.attempts + 4) : 0.5);
     }, 0) / themes.length;
   };
-  const byFit = (a, b) => (weakness(b) - weakness(a)) * 600 + Math.abs(a.rating - rating) - Math.abs(b.rating - rating) || a.id.localeCompare(b.id);
+  const byFit = (a, b) => (weakness(b) - weakness(a)) * 600 + Math.abs(a.rating - target(a)) - Math.abs(b.rating - target(b)) || a.id.localeCompare(b.id);
   const unseen = pool.filter(p => !cards[p.id]).sort(byFit);
   const due = pool.filter(p => cards[p.id]?.due <= now).sort((a, b) => cards[a.id].due - cards[b.id].due || byFit(a, b));
   // One in three completed attempts introduces new material when available.

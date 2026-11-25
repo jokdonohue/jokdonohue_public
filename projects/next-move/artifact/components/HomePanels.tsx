@@ -1,5 +1,6 @@
-/** Home-screen pieces: today's progress line, Claude's plan, unread notes, and the connection banner. */
-import type { PlanDoc } from '@/src/contract/docs';
+/** Home-screen pieces: today's progress line, Claude's plan, unread notes, answers to his notes, and the connection banner. */
+import { Fragment } from 'react';
+import type { FeedbackDoc, PlanDoc } from '@/src/contract/docs';
 import type { ConnectionState, SaveState } from '@/src/contract/store';
 import type { NoteView } from './model';
 import type { CapState, DailyCounts } from './daily';
@@ -48,6 +49,87 @@ export function PlanAndNotes({ plan, notes, pretty, onRead, id }: {
           {!n.read && <button type="button" className="chip" onClick={() => onRead(n.id)}>Mark as read</button>}</div>
       </article>)}
     </div>}
+  </section>;
+}
+
+/** An answered note as the model delivers it (`view.answeredFeedback`). */
+export type AnsweredNote = { id: string; doc: FeedbackDoc };
+/** The From Claude panel lists at most this many answers. */
+export const MAX_ANSWERS_SHOWN = 10;
+
+/** What he sent, in words, for a note without text (the FeedbackBar buttons). */
+const SENT: Record<FeedbackDoc['kind'], string> = {
+  wrong: 'You reported that something is wrong.',
+  'too-easy': 'You marked it too easy.',
+  'too-hard': 'You marked it too hard.',
+  more: 'You asked for more like this.',
+  less: 'You asked for fewer like this.',
+  comment: 'You left a note.',
+};
+/** The card's kind, when its title is not known (the card may have left the pools since). */
+const KIND: Record<FeedbackDoc['source'], string> = {
+  bank: 'Lichess puzzle',
+  pack: 'Position from your game',
+  personal: 'Position from your game',
+  endgame: 'Endgame drill',
+  agent: 'Practice line from Claude',
+};
+
+/** Only notes Claude has answered (done, with a reply), newest first. A new array; the input is left as it is. */
+export function answeredNotes(items: readonly AnsweredNote[]): AnsweredNote[] {
+  return items.filter(i => i.doc.status === 'done' && typeof i.doc.reply === 'string' && i.doc.reply.trim() !== '')
+    .sort((a, b) => b.doc.at - a.doc.at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+}
+
+const dateOf = (ms: number) => (ms ? new Date(ms).toLocaleDateString() : '');
+/** A pasted link or other long word in a note or reply wraps instead of pushing the page sideways on a phone. */
+const WRAP = { overflowWrap: 'anywhere' } as const;
+
+/** Plain text with its line breaks kept; React escapes the text, so nothing in it is read as HTML. */
+function Lines({ text }: { text: string }) {
+  return <>{text.trim().split(/\r?\n/).map((line, i) => <Fragment key={i}>{i > 0 && <br/>}{line}</Fragment>)}</>;
+}
+
+/** His side (what he sent, his note) and Claude's reply. */
+function NoteAndReply({ doc }: { doc: FeedbackDoc }) {
+  const note = doc.text?.trim() ?? '';
+  return <>
+    {(doc.kind !== 'comment' || !note) && <p className="small">{SENT[doc.kind]}</p>}
+    {note && <p><strong>Your note: </strong><Lines text={note}/></p>}
+    <p><strong>Claude: </strong><Lines text={doc.reply ?? ''}/></p>
+  </>;
+}
+
+/**
+ * M3 (L7): "Answers to your notes" in the From Claude area: newest first, at most 10, each with its date, the card's
+ * title (or its kind), what he sent and Claude's reply. `titleOf` gives the card's title, or null when unknown.
+ * The root keeps the `plan-notes` class, so the practice page's order rules place it with the plan and notes.
+ */
+export function AnswersPanel({ items, titleOf }: { items: ReadonlyArray<AnsweredNote>; titleOf: (itemId: string) => string | null }) {
+  const shown = answeredNotes(items).slice(0, MAX_ANSWERS_SHOWN);
+  if (!shown.length) return null;
+  return <section className="surface plan-notes answers-panel" aria-label="Answers to your notes" style={WRAP}>
+    <div className="notes">
+      <h2>Answers to your notes</h2>
+      {shown.map(({ id, doc }) => <article key={id} className="note">
+        <div className="note-meta"><span className="small">{[dateOf(doc.at), titleOf(doc.itemId) || KIND[doc.source]].filter(Boolean).join(' · ')}</span></div>
+        <NoteAndReply doc={doc}/>
+      </article>)}
+    </div>
+  </section>;
+}
+
+/** M3 (L7): Claude's answer to his note on the card that is showing (the caller passes that card's answered notes). */
+export function CardAnswer({ items }: { items: ReadonlyArray<AnsweredNote> }) {
+  const shown = answeredNotes(items);
+  if (!shown.length) return null;
+  // The paragraphs go straight into the `coach-answer` grid, which spaces its children.
+  return <section className="coach-answer card-answer" aria-label="Claude's answer to your note" style={WRAP}>
+    <h3>{shown.length === 1 ? "Claude's answer to your note" : "Claude's answers to your notes"}</h3>
+    {shown.map(({ id, doc }) => <Fragment key={id}>
+      {doc.at > 0 && <p className="small">{dateOf(doc.at)}</p>}
+      <NoteAndReply doc={doc}/>
+    </Fragment>)}
   </section>;
 }
 

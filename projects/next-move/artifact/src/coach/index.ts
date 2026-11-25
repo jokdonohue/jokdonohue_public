@@ -3,20 +3,30 @@
  * `createCoach(deps)` once `claude.use("sample")` resolves non-null; with no `sample` the Trainer gets
  * `coach: null` and shows `staticPanel` (exported here) on its own.
  *
- * `ask` order: validate -> cache (`explanations/*`, same inputsHash) -> limits -> one model call -> grounding
- * check -> cache write (best effort and not awaited; a failed or slow write never affects the answer).
+ * `ask` order: validate -> cache (`explanations/*`, same inputsHash) -> abort check (a Stop during the cache read
+ * wins, brief 8.13) -> limits -> one model call -> grounding check -> cache write (best effort and not awaited; a
+ * failed or slow write never affects the answer).
+ *
+ * Cache paths (M3, L10): explain answers stay at `explanations/<itemId>__<playedUci>`; ask answers go to
+ * `explanations/<itemId>__ask-<inputsHash>`. The version-6 page never lists `explanations/` (its only queries
+ * are on sessions, summaries, notes, feedback, drills and personal) and reads only the exact explain path built
+ * from a UCI move, which can never be `ask-…`; so ask documents are invisible to it, and they use the same
+ * schema (`explanationDoc`, without `playedUci`).
  */
 import type {
   CoachAskOptions, CoachClient, CoachDeps, CoachErrorCode, CoachFailure, CoachInput, CoachResult,
 } from '../contract/coach';
 import { CoachError } from '../contract/coach';
-import { paths, prepareWrite, readDoc, type ExplanationDoc } from '../contract/docs';
+import { ATTEMPT_SOURCES, paths, prepareWrite, readDoc, type ExplanationDoc } from '../contract/docs';
 import type { PermissionState } from '../contract/store';
 import { buildPrompt, inputsHash } from './prompts';
 import { groundCheck } from './ground';
 import { createLimiter, nextLocalMidnight } from './rateLimit';
 
-export { buildExplainPrompt, buildSummaryPrompt, buildPrompt, inputsHash } from './prompts';
+export {
+  buildAskPrompt, buildExplainPrompt, buildSummaryPrompt, buildPrompt, inputsHash, askedLineSans, resultWords, shownLine, tablebaseCard, verdictFromWin,
+  COACH_PROMPT_VERSION, PROMPT_VERSION, ANSWER_WORDS,
+} from './prompts';
 export { groundCheck } from './ground';
 export { explainInputFromPackCard, explainInputFromPuzzle, staticPanel, staticPanelText, sanMoves } from './inputs';
 export { COOLDOWN_MS, DAILY_LIMIT } from './rateLimit';
@@ -55,13 +65,33 @@ export function toFailure(e: unknown): CoachFailure {
   return { code: c, action, message: MESSAGES[c]!, ...(partial ? { partial } : {}) };
 }
 
+const isSource = (s: unknown) => (ATTEMPT_SOURCES as readonly unknown[]).includes(s);
+const LINE_SOURCES: readonly unknown[] = ['engine', 'stored', 'tablebase'];
+
 function validate(input: CoachInput): void {
   const bad = (why: string) => { throw new CoachError({ code: 'invalid_request', action: 'tell', message: `This question could not be sent (${why}).` }); };
-  if (!input || (input.kind !== 'explain' && input.kind !== 'summary')) bad('unknown kind');
+  if (!input || (input.kind !== 'explain' && input.kind !== 'summary' && input.kind !== 'ask')) bad('unknown kind');
   if (input.kind === 'explain') {
     if (!input.itemId || !input.fen || !input.playedSan || !input.bestSan) bad('missing fields');
     if (!Array.isArray(input.bestLineSan) || !Array.isArray(input.refutationSan) || !Array.isArray(input.themes)) bad('lines');
+  } else if (input.kind === 'ask') {
+    if (!input.itemId || !input.fen || !isSource(input.source) || (input.side !== 'w' && input.side !== 'b')) bad('missing fields');
+    if (typeof input.question !== 'string' || !input.question.trim()) bad('empty question');
+    if (!Array.isArray(input.answerLineSan) || !Array.isArray(input.askedLines)) bad('lines');
+    if (input.askedLines.some(l => !l || typeof l.san !== 'string' || !Array.isArray(l.lineSan) || !LINE_SOURCES.includes(l.source))) bad('checked moves');
   } else if (!Array.isArray(input.session) || !Array.isArray(input.weakest) || !Array.isArray(input.focus)) bad('summary fields');
+}
+
+/**
+ * The `explanations/*` document that caches an answer: explain -> `<itemId>__<playedUci>`, ask ->
+ * `<itemId>__ask-<inputsHash>`; null for summaries and for ids that make no valid path (then nothing is cached).
+ */
+export function cachePath(input: CoachInput, hash: string): string | null {
+  try {
+    if (input.kind === 'explain') return paths.explanation(input.itemId, input.playedUci);
+    if (input.kind === 'ask') return paths.explanation(input.itemId, `ask-${hash}`);
+  } catch { /* an id that makes no valid path is simply not cached */ }
+  return null;
 }
 
 export function createCoach(deps: CoachDeps): CoachClient {
@@ -69,9 +99,9 @@ export function createCoach(deps: CoachDeps): CoachClient {
   const limiter = createLimiter({ deviceId: deps.deviceId, storage: deps.storage, now });
 
   async function cached(input: CoachInput, hash: string): Promise<CoachResult | null> {
-    if (input.kind !== 'explain') return null;
+    const path = cachePath(input, hash);
+    if (!path) return null;
     try {
-      const path = paths.explanation(input.itemId, input.playedUci);
       const doc = await deps.store.get(path);
       const body = doc ? readDoc<ExplanationDoc>(path, doc.data) : null;
       if (!body || body.inputsHash !== hash) return null;
@@ -80,12 +110,12 @@ export function createCoach(deps: CoachDeps): CoachClient {
   }
 
   async function remember(input: CoachInput, result: CoachResult): Promise<void> {
-    if (input.kind !== 'explain' || result.truncated) return;
+    const path = cachePath(input, result.inputsHash);
+    if (!path || input.kind === 'summary' || result.truncated) return;
     try {
-      const path = paths.explanation(input.itemId, input.playedUci);
       const body = prepareWrite(path, {
         text: result.text.slice(0, 3000), at: result.at, grounded: result.grounded, inputsHash: result.inputsHash,
-        itemId: input.itemId, playedUci: input.playedUci, misses: result.misses.slice(0, 20),
+        itemId: input.itemId, ...(input.kind === 'explain' ? { playedUci: input.playedUci } : {}), misses: result.misses.slice(0, 20),
       });
       await deps.store.set(path, body);
     } catch { /* best effort: the answer is already shown */ }
@@ -101,8 +131,9 @@ export function createCoach(deps: CoachDeps): CoachClient {
       validate(input);
       const hash = inputsHash(input);
       const hit = await cached(input, hash);
-      if (hit) return hit;
+      // Brief 8.13: Stop during the cache read wins over a saved answer, so check the signal before returning it.
       if (options.signal?.aborted) throw new CoachError(toFailure({ code: 'cancelled' }));
+      if (hit) return hit;
       const blocked = limiter.check();
       if (blocked) throw new CoachError(blocked);
       const built = buildPrompt(input);
@@ -123,7 +154,7 @@ export function createCoach(deps: CoachDeps): CoachClient {
       }
       const text = (answer?.text ?? '').trim();
       if (!text) throw new CoachError(toFailure({ code: 'empty_completion' }));
-      const ground = groundCheck(text, built, input.kind);
+      const ground = groundCheck(text, built, input.kind); // ask answers follow the explain rules
       const result: CoachResult = { text, grounded: ground.grounded, misses: ground.misses, cached: false, truncated: !!answer.truncated, at: now(), inputsHash: hash };
       void remember(input, result); // not awaited: a slow store never holds back an answer already shown
       return result;

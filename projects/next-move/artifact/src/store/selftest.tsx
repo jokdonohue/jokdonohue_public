@@ -5,7 +5,9 @@
  * then delete).
  */
 import { useEffect, useState } from 'react';
+import { DEFAULT_POSITION } from 'chess.js';
 import { createMemoryKv, StoreError, toStoreError, type DocData, type Store } from '../contract/store';
+import { getSharedEngine, searchOnce, TRY_DEPTH, TRY_MAX_MS } from '../teach/tryMove';
 import { createDbStore } from './dbStore';
 import { openIdbKv } from './idbKv';
 import { createSessionWriter } from './sessionWriter';
@@ -62,6 +64,17 @@ function engineCheck(): Promise<string> {
     worker.postMessage('uci');
     worker.postMessage('isready');
   });
+}
+
+/** M3 L12: the start position through the helper the wrong-try check uses (`src/teach/tryMove.ts`): depth 12, 1500 ms cap. */
+async function engineSearchCheck(): Promise<string> {
+  const engine = getSharedEngine();
+  assert(engine, 'no Web Worker in this browser');
+  try {
+    const r = await searchOnce(engine, DEFAULT_POSITION, { depth: TRY_DEPTH, maxMs: TRY_MAX_MS });
+    assert(r.depth >= TRY_DEPTH, `the ${TRY_MAX_MS} ms cap stopped the search at depth ${r.depth} after ${r.ms} ms (worker start included)`);
+    return `depth ${r.depth}, best ${r.line[0] ?? 'none'}, ${r.ms} ms including the worker start (cap ${TRY_MAX_MS} ms per search)`;
+  } finally { engine.dispose(); }
 }
 
 export async function runSelfTest(env: SelfTestEnv, onUpdate: (r: CheckResult[]) => void): Promise<CheckResult[]> {
@@ -153,6 +166,7 @@ export async function runSelfTest(env: SelfTestEnv, onUpdate: (r: CheckResult[])
     return 'set, get, delete';
   }));
   push(await timed('engine worker', engineCheck));
+  push(await timed('engine depth-12 search', engineSearchCheck));
   push(await timed('10 s load timer', async () => {
     const hanging = { doc: () => ({ get: () => new Promise(() => {}) }), collection: () => { throw new Error('unused'); } } as unknown as PlatformDb;
     const probe = createDbStore(hanging, { timeoutMs: 10_000 });

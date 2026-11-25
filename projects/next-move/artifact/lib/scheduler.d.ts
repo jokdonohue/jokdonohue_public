@@ -41,10 +41,15 @@ export interface Progress {
   settings: { rating: number; sessionLength: number };
 }
 
-export interface SelectOptions {
+export interface SelectOptions<P extends Puzzle = Puzzle> {
   theme?: string;
   now?: number;
   excludeIds?: string[];
+  /**
+   * M3 bank level: the rating `puzzle` is measured against instead of `progress.settings.rating`.
+   * `undefined` (or a non-finite number) keeps `settings.rating` for that puzzle; without the option nothing changes.
+   */
+  targetOf?: (puzzle: P) => number | undefined;
 }
 
 export interface AttemptOptions {
@@ -69,7 +74,7 @@ export interface SkillStats {
 export function trainingThemes(themes: string[]): string[];
 
 /** Preserve caller-specific puzzle fields in the selected result. */
-export function selectPuzzle<P extends Puzzle>(puzzles: readonly P[], progress: Progress, options?: SelectOptions): P | null;
+export function selectPuzzle<P extends Puzzle>(puzzles: readonly P[], progress: Progress, options?: SelectOptions<P>): P | null;
 /** Preserve extra top-level/settings fields; replace the three updated records. */
 export function recordAttempt<P extends Progress>(progress: P, puzzle: Puzzle, options: AttemptOptions): Omit<P, 'attempts' | 'cards' | 'skills'> & Pick<Progress, 'attempts' | 'cards' | 'skills'>;
 export function getSkillStats(progress: Progress, puzzles: readonly Puzzle[]): SkillStats[];

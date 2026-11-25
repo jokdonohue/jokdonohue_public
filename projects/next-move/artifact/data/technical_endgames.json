@@ -17,7 +17,7 @@
     ],
     "gameUrl": "",
     "title": "Rook mate: bring the king up",
-    "explanation": "The rook already holds the seventh rank. Kg6 takes away h7 and g7, so Black's only move is Kg8, and Ra8 is mate along the back rank. A rook move first would either stalemate Black or let the king out."
+    "explanation": "The rook already holds the seventh rank. Kg6 takes away h7 and g7, so Black's only move is Kg8, and Ra8 is mate along the back rank. A rook move first misses the mate in two. On g7 the rook stalemates Black, and on h7 Black's king can take it. Anywhere else the mate takes longer."
   },
   {
     "id": "tech-krk-mate-in-two-rook-cut",
@@ -302,7 +302,7 @@
     ],
     "gameUrl": "",
     "title": "Rook v pawn: count and bring the king",
-    "explanation": "Your rook already stands far behind the pawn. Its job is done, and what decides the race is how fast your king arrives. Kc6 heads straight for the pawn. Any rook move or slower king route lets Black's king and pawn reach the first rank together and draw."
+    "explanation": "Your rook on h1 already guards e1, where the pawn would promote. Its job is done, and what decides the race is how fast your king arrives. Kc6 heads straight for the pawn. Any rook move or slower king route only draws."
   },
   {
     "id": "tech-lucena-rook-to-the-fourth",

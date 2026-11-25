@@ -22,6 +22,8 @@
  *
  * Writes <out>/<collection>/<docId>.json (compact JSON, the exact document body), <out>/batches.json (ArtifactData
  * batch entries, at most 50 writes and 600 KiB each, pack/meta alone in the last batch) and <out>/summary.json.
+ * Each entry's `file_path` is `<collection>/<docId>.json`: relative to <out>, the folder that holds batches.json, so
+ * the folder can move (or be built as seed/next and moved up); whoever applies a batch joins it to that folder.
  * Exits 1 when counts do not reconcile with run_manifest.json (unless --allow-mismatch) or any document fails
  * its contract schema or the 180 KiB limit. Prints one summary line per stage, never document content.
  */
@@ -130,7 +132,8 @@ docs.forEach((d, i) => {
   const file = join(out, collection, `${docId}.json`);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(d.data));
-  const entry = { op: 'set', collection, doc_id: docId, file_path: file, bytes: sizes[i] };
+  // `file_path` names `file` relative to <out>, the folder that holds batches.json (forward slashes), never absolute.
+  const entry = { op: 'set', collection, doc_id: docId, file_path: `${collection}/${docId}.json`, bytes: sizes[i] };
   const isMeta = d.path === 'pack/meta' || d.path === 'safe/meta';
   if (current.writes.length && (isMeta || current.writes.length >= BATCH_MAX_WRITES || current.bytes + sizes[i] > BATCH_MAX_BYTES)) { batches.push(current); current = { writes: [], bytes: 0 }; }
   current.writes.push(entry); current.bytes += sizes[i];

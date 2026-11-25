@@ -6,12 +6,12 @@ Target: `<project root>/private_snapshots/<YYYY-MM-DD>/` (add `-2`, `-3` for a s
 
 Steps (reads only):
 1. Load the tool: ToolSearch `select:ArtifactData`.
-2. For each collection in this order: `meta`, `settings`, `plan`, `notes`, `drills`, `feedback`, `ingest`, `transfer`, `openings`, `derived`, `summaries`, `sessions`, `games`, `personal`, `explanations`, `safe`, `pack`:
+2. For each collection in this order: `meta`, `settings`, `plan`, `notes`, `drills`, `feedback`, `ingest`, `transfer`, `openings`, `derived`, `summaries`, `sessions`, `games`, `personal`, `explanations`, `teach`, `safe`, `pack`:
    `ArtifactData` `action:"list"`, `url:<ARTIFACT_URL>`, `collection:<name>`, `query:{limit:1000}`, `out_dir:"<project root>/private_snapshots/<YYYY-MM-DD>"`.
    Each document lands at `<out_dir>/<collection>/<doc_id>.json`. The files are the bare document bodies, pretty-printed (observed at the first seed, 2026-11-10), so a snapshot works as `--prev` and as restore input. Large collections come back in pages (about 18 pack chunks per page even with limit 1000): always follow `next_cursor`. If the result carries `next_cursor`, repeat with `query:{limit:1000, cursor:<next_cursor>}` until it does not.
-3. Write `<out_dir>/MANIFEST.txt`: date, artifact URL, `pack/meta.packVersion`, and per collection the number of files. Compare the `pack` count with `pack/meta.chunks` (+1 for `meta`), and, once M2 data is seeded, the `safe` count with `safe/meta.chunks` (+1).
+3. Write `<out_dir>/MANIFEST.txt`: date, artifact URL, `pack/meta.packVersion`, and per collection the number of files. Compare the `pack` count with `pack/meta.chunks` (+1 for `meta`), and, once M2 data is seeded, the `safe` count with `safe/meta.chunks` (+1). `teach` (version 7.1) holds one file, `meta.json`, once `teach/meta` is seeded (`ingest.md` section D) and none before: an empty list for it is not an error. The document has no chunks.
 4. Report the counts to the owner in one line.
 
-Restore (only on the owner's explicit request): for each document file, `ArtifactData` `batch` entries `{op:"set", collection, doc_id, file_path}` (at most 50 writes and 1 MiB per batch), `pack/meta` and `safe/meta` last; documents that still exist need their current `version` as `if_version`.
+Restore (only on the owner's explicit request): for each document file, `ArtifactData` `batch` entries `{op:"set", collection, doc_id, file_path}` (at most 50 writes and 1 MiB per batch), `pack/meta` and `safe/meta` last; documents that still exist need their current `version` as `if_version`. `teach/meta` lists no chunks, so it can be restored at any point; restore it only together with the `pack` it was computed for (its `packVersion` field names it).
 
 The `pack/*.json` files of a snapshot are also the `--prev` input of `scripts/pack-to-docs.mjs` (see `ingest.md` step B4), so a refresh keeps every card id the live pack has issued.

@@ -15,6 +15,7 @@ import {
   MAX_DOC_ERRORS, schemaForPath, type OpeningsDoc, type TransferDoc, type SafeCardDoc, type SafeChunkDoc, type SafeMetaDoc,
 } from '@/src/contract/docs';
 import { toStoreError, type ConnectionState, type SaveState, type SessionWriter, type Store, type StoreDoc, type Unsubscribe } from '@/src/contract/store';
+import { readTeachMeta, TEACH_META_PATH, type TeachHeld, type TeachRead, type TeachThreat } from '@/src/contract/teachDocs';
 import { DEFAULT_NEW_CAP, DEFAULT_REVIEW_CAP } from './daily';
 import { isPutBack } from './leech';
 
@@ -45,6 +46,22 @@ export interface LoadedSafe {
   version: string;
   cards: SafeCardDoc[];
 }
+/**
+ * Version 7.1 (brief m31, 4.2): the document `teach/meta` as the pools join it. `byId`: what a quiet answer threatens,
+ * by card id. `held`: graded "punish it" cards that leave the graded set, by card id. Each entry names the answer it
+ * was computed for (`a`); the join checks it. Null in the view when the document is absent, unreadable or of a later
+ * format: the page then behaves as version 7.
+ */
+export interface LoadedTeach {
+  teachVersion: string;
+  byId: Map<string, TeachThreat>;
+  held: Map<string, TeachHeld>;
+}
+/** `LoadedTeach` from a read of `teach/meta`; null unless the document was read. */
+export function loadTeach(read: TeachRead): LoadedTeach | null {
+  if (!read.ok) return null;
+  return { teachVersion: read.teachVersion, byId: new Map(read.cards.map(c => [c.id, c])), held: new Map(read.held.map(h => [h.id, h])) };
+}
 /** M2 (D10): an agent document the page could not read. */
 export interface DocError { path: string; issue: string; at: number }
 export interface NoteView { id: string; text: string; createdAt: number; read: boolean }
@@ -70,6 +87,11 @@ export interface TrainerView {
   plan: PlanDoc | null;
   notes: NoteView[];
   openFeedback: Array<{ id: string; doc: FeedbackDoc }>;
+  /**
+   * M3 (L7): his notes Claude has answered (`feedback/*` with `status: "done"` and a non-blank `reply`), newest first
+   * by `at`; the newest 100 done documents are read. Read-only: Claude writes `status` and `reply`.
+   */
+  answeredFeedback: Array<{ id: string; doc: FeedbackDoc }>;
   /** Item ids with open "wrong" feedback (including ones sent from this page and not yet echoed back). */
   flaggedWrong: ReadonlySet<string>;
   drills: DrillSetView[];
@@ -81,6 +103,11 @@ export interface TrainerView {
   openings: OpeningsDoc | null;
   /** M2 (D9): `transfer/history`, or null when absent or unreadable. */
   transfer: TransferDoc | null;
+  /**
+   * Version 7.1: `teach/meta`, or null when absent, unreadable or of a later format (then as version 7). The same
+   * object until the stored document changes, so it can be a memo dependency.
+   */
+  teach: LoadedTeach | null;
   /** M2 (D10): agent documents that failed validation and were skipped (newest first, at most 20). */
   docErrors: DocError[];
   /** Plain-language problem to show, or ''. */
@@ -142,6 +169,16 @@ export function collectAttempts(docs: readonly SessionDoc[], ...local: ReadonlyA
   for (const doc of docs) for (const a of doc.attempts) byKey.set(attemptKey(a), a);
   for (const list of local) for (const a of list) if (!byKey.has(attemptKey(a))) byKey.set(attemptKey(a), a);
   return [...byKey.values()].sort((a, b) => a.at - b.at || a.puzzleId.localeCompare(b.puzzleId));
+}
+
+/**
+ * M3 (L7): answered notes from `feedback` documents: valid ones with `status: "done"` and a non-blank reply,
+ * newest first by `at` (then by id, newest first).
+ */
+export function answeredFeedbackFrom(docs: ReadonlyArray<{ id: string; path: string; data: unknown }>): Array<{ id: string; doc: FeedbackDoc }> {
+  return docs.map(d => ({ id: d.id, doc: readDoc<FeedbackDoc>(d.path, d.data) }))
+    .filter((f): f is { id: string; doc: FeedbackDoc } => !!f.doc && f.doc.status === 'done' && !!f.doc.reply?.trim())
+    .sort((a, b) => b.doc.at - a.doc.at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
 }
 
 /** Check an agent drill line with chess.js; returns the reason it fails, or null. */
@@ -237,11 +274,15 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
   let plan: PlanDoc | null = null;
   let noteDocs: Array<StoreDoc> = [];
   let openFeedback: Array<{ id: string; doc: FeedbackDoc }> = [];
+  let answeredFeedback: Array<{ id: string; doc: FeedbackDoc }> = [];
   let drills: DrillSetView[] = [];
   let personal: PuzzleDoc[] = [];
   let safe: LoadedSafe | null = null;
   let openings: OpeningsDoc | null = null;
   let transfer: TransferDoc | null = null;
+  let teach: LoadedTeach | null = null;
+  /** The stored `teach/meta` body behind `teach`, as JSON: an unchanged redelivery keeps the same `teach` object. */
+  let teachBody = '';
   let safeToken = 0;
   let safeRetry: ReturnType<typeof setTimeout> | null = null;
   /** D10: unreadable agent documents by path; `at` is when this page first saw the current issue. */
@@ -262,7 +303,8 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
   const localFlags = new Set<string>();
   const readLocally = new Set<string>();
   // First delivery (or error) of everything the first pick depends on; the load timer is the only escape.
-  const arrived = { settings: false, sessions: false, pack: false, plan: false, feedback: false };
+  // Version 7.1: `teach` too, so the held cards are known before the first card is picked.
+  const arrived = { settings: false, sessions: false, pack: false, plan: false, feedback: false, teach: false };
   let timedOut = false;
   let packToken = 0;
   const packRetryMs = options.packRetryMs ?? 5000;
@@ -283,7 +325,7 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
     return {
       ready: isReady(), synced: confirmed.settings && confirmed.sessions, connection: store.connection(), saveState: sessions.saveState(), unconfirmed: sessions.unconfirmed().length, settings, attempts, putBacks, pack, plan, notes,
       // A flag on a set id sets the whole drill set aside; flags on card ids are applied by selection.
-      openFeedback, flaggedWrong: flagged, drills: drills.filter(set => !flagged.has(set.id)), personal, safe, openings, transfer,
+      openFeedback, answeredFeedback, flaggedWrong: flagged, drills: drills.filter(set => !flagged.has(set.id)), personal, safe, openings, transfer, teach,
       docErrors: [...docErrors.values()].sort((a, b) => b.at - a.at || (a.path < b.path ? -1 : 1)).slice(0, MAX_DOC_ERRORS), error,
     };
   }
@@ -368,6 +410,13 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
     for (const id of [...localFlags]) if (openFeedback.some(f => f.doc.itemId === id && f.doc.kind === 'wrong')) localFlags.delete(id);
     arrived.feedback = true; emit();
   }, onError('feedback', 'feedback')));
+  // M3 (L7): answered notes, read-only. Ordered by the note's time so the window of 100 is the newest one (without
+  // `orderBy` it would be the oldest 100 by id). Never part of `ready`; a failure leaves the list empty without a
+  // banner, like the read-outs below.
+  unsubs.push(store.subscribeQuery({ collection: 'feedback', where: [['status', '==', 'done']], orderBy: { field: 'at', dir: 'desc' }, limit: 100 }, docs => {
+    answeredFeedback = answeredFeedbackFrom(docs);
+    emit();
+  }, () => { answeredFeedback = []; emit(); }));
   unsubs.push(store.subscribeQuery({ collection: 'drills', where: [['active', '==', true]], limit: 50 }, docs => {
     drills = [];
     clearDocErrors('drills/', new Set(docs.map(d => d.path)));
@@ -417,6 +466,24 @@ export function createTrainerModel(options: ModelOptions): TrainerModel {
     };
     load(0);
   }, () => { safe = null; emit(); }));
+  // Version 7.1 (brief m31, 4.2): `teach/meta`, one document in a collection of its own; read only, never written.
+  // Part of `ready`: its first delivery (present or absent) or its error sets `arrived.teach`, so the held cards are
+  // known before the first card is picked and a failure never blocks the page. Absent or of a later format: null, no
+  // error line. Unreadable, or with entries skipped: one docError line. A failed subscription: no banner; what was
+  // read before stays. A store that refuses the subscription outright (it throws) counts as a failed one: this is
+  // the page's first read in a collection outside the contract's list, and it must never stop the page.
+  try {
+    unsubs.push(store.subscribe(TEACH_META_PATH, doc => {
+      const read = readTeachMeta(doc?.data);
+      noteDocError(TEACH_META_PATH, read.issue);
+      const body = read.ok ? JSON.stringify(doc?.data) : '';
+      if (!read.ok) { teach = null; teachBody = ''; }
+      else if (!teach || body !== teachBody) { teach = loadTeach(read); teachBody = body; }
+      arrived.teach = true; emit();
+    }, () => { arrived.teach = true; emit(); }));
+  } catch {
+    arrived.teach = true;
+  }
   // M2 (D8, D9): agent read-outs. Never part of `ready`; absent or unreadable means the section is not shown.
   unsubs.push(store.subscribe(paths.openingAccidents(), doc => {
     openings = doc ? readDoc<OpeningsDoc>(paths.openingAccidents(), doc.data) : null;
